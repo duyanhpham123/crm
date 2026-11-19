@@ -1,0 +1,178 @@
+using Microsoft.EntityFrameworkCore;
+using MyERP.Api.Common;
+using MyERP.Api.Data;
+using MyERP.Api.Models;
+using MyERP.Api.Models.DTOs;
+using MyERP.Api.Models.Entities.Crm;
+using MyERP.Api.Services.Common;
+
+namespace MyERP.Api.Services.Crm;
+
+public interface ILeadService
+{
+    Task<PagedResult<LeadListItem>> ListAsync(LeadQuery query, CancellationToken ct);
+    Task<Result<LeadDto>> GetAsync(long id, CancellationToken ct);
+    Task<Result<LeadDto>> CreateAsync(SaveLeadRequest request, CancellationToken ct);
+    Task<Result<LeadDto>> UpdateAsync(long id, SaveLeadRequest request, CancellationToken ct);
+    Task<Result<LeadDto>> ChangeStatusAsync(long id, ChangeLeadStatusRequest request, CancellationToken ct);
+    Task<Result> DeleteAsync(long id, CancellationToken ct);
+    Task<List<LeadSourceDto>> ListSourcesAsync(CancellationToken ct);
+}
+
+public sealed class LeadService(AppDbContext db, ICurrentUser currentUser, IDocumentNumberService docNumbers) : ILeadService
+{
+    public async Task<PagedResult<LeadListItem>> ListAsync(LeadQuery q, CancellationToken ct)
+    {
+        var page = Math.Max(1, q.Page);
+        var pageSize = Math.Clamp(q.PageSize, 1, 100);
+
+        var query = await ScopedAsync(Permissions.Crm.View, ct);
+        if (!string.IsNullOrWhiteSpace(q.Status))
+            query = query.Where(x => x.Status == q.Status);
+        if (!string.IsNullOrWhiteSpace(q.Search))
+        {
+            var s = q.Search.Trim();
+            var phone = PhoneNumber.Normalize(s);
+            query = query.Where(x => x.FullName.Contains(s) || x.Code.Contains(s)
+                || (x.OrganizationName != null && x.OrganizationName.Contains(s))
+                || (x.Email != null && x.Email.Contains(s))
+                || (phone != null && phone != "" && x.Phone != null && x.Phone.Contains(phone)));
+        }
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(x => x.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(x => new LeadListItem(x.Id, x.Code, x.FullName, x.OrganizationName, x.Phone, x.Email,
+                x.Source != null ? x.Source.Name : null, x.Status, x.EstimatedValue, x.OwnerUserId, x.CreatedAt))
+            .AsNoTracking().ToListAsync(ct);
+
+        return new PagedResult<LeadListItem>(items, page, pageSize, total);
+    }
+
+    public async Task<Result<LeadDto>> GetAsync(long id, CancellationToken ct)
+    {
+        var lead = await (await ScopedAsync(Permissions.Crm.View, ct)).AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        return lead is null ? Error.NotFound("lead") : ToDto(lead);
+    }
+
+    public async Task<Result<LeadDto>> CreateAsync(SaveLeadRequest req, CancellationToken ct)
+    {
+        var info = ToInfo(req);
+        if (await SourceInvalidAsync(info.SourceId, ct))
+            return Error.Validation("lead.source_invalid", "Nguồn lead không hợp lệ.");
+        if (await FindDuplicateAsync(info, excludeId: null, ct) is { } dup)
+            return Error.Conflict("lead.duplicate", $"Đã có lead {dup} với cùng số điện thoại hoặc email.");
+
+        // Lấy số chứng từ và lưu trong cùng transaction: lỗi thì số không bị "nhảy".
+        // Bật retry khi mất kết nối nên phải bọc trong execution strategy.
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var code = await docNumbers.NextAsync("LEAD", ct: ct);
+            var lead = Lead.Create(currentUser.RequireCompanyId(), code, currentUser.RequireUserId(), info);
+            db.Leads.Add(lead);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return (Result<LeadDto>)ToDto(lead);
+        });
+    }
+
+    public async Task<Result<LeadDto>> UpdateAsync(long id, SaveLeadRequest req, CancellationToken ct)
+    {
+        var lead = await (await ScopedAsync(Permissions.Crm.Edit, ct)).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (lead is null) return Error.NotFound("lead");
+
+        var info = ToInfo(req);
+        if (await SourceInvalidAsync(info.SourceId, ct))
+            return Error.Validation("lead.source_invalid", "Nguồn lead không hợp lệ.");
+        if (await FindDuplicateAsync(info, id, ct) is { } dup)
+            return Error.Conflict("lead.duplicate", $"Đã có lead {dup} với cùng số điện thoại hoặc email.");
+
+        if (!string.IsNullOrEmpty(req.RowVersion))
+            db.Entry(lead).Property(x => x.RowVersion).OriginalValue = Convert.FromBase64String(req.RowVersion);
+
+        var result = lead.Update(info);
+        if (result.IsFailure) return result.Error!;
+
+        await db.SaveChangesAsync(ct);   // RowVersion lệch thì ném DbUpdateConcurrencyException, trả 409
+        return ToDto(lead);
+    }
+
+    public async Task<Result<LeadDto>> ChangeStatusAsync(long id, ChangeLeadStatusRequest req, CancellationToken ct)
+    {
+        var lead = await (await ScopedAsync(Permissions.Crm.Edit, ct)).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (lead is null) return Error.NotFound("lead");
+
+        var result = lead.ChangeStatus(req.Status, req.Reason);
+        if (result.IsFailure) return result.Error!;
+        await db.SaveChangesAsync(ct);
+        return ToDto(lead);
+    }
+
+    public async Task<Result> DeleteAsync(long id, CancellationToken ct)
+    {
+        var lead = await (await ScopedAsync(Permissions.Crm.Delete, ct)).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (lead is null) return Error.NotFound("lead");
+        if (lead.IsConverted)
+            return Error.Conflict("lead.converted", "Không xóa lead đã chuyển đổi thành khách hàng.");
+
+        db.Leads.Remove(lead);   // AuditInterceptor đổi thành xóa mềm
+        await db.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+
+    public Task<List<LeadSourceDto>> ListSourcesAsync(CancellationToken ct)
+        => db.LeadSources.Where(s => s.IsActive).OrderBy(s => s.Name)
+            .Select(s => new LeadSourceDto(s.Id, s.Code, s.Name)).AsNoTracking().ToListAsync(ct);
+
+    /// <summary>
+    /// Lọc theo phạm vi dữ liệu của quyền: own = lead của mình, department = của cả phòng,
+    /// branch = cả chi nhánh, company/all = toàn công ty.
+    /// </summary>
+    private async Task<IQueryable<Lead>> ScopedAsync(string permission, CancellationToken ct)
+    {
+        var scope = await currentUser.GetScopeAsync(permission, ct) ?? throw new UnauthorizedAccessException();
+        var me = currentUser.RequireUserId();
+        var companyId = currentUser.RequireCompanyId();
+
+        IReadOnlyList<long>? visibleOwners = scope switch
+        {
+            DataScope.Own => [me],
+            DataScope.Department when currentUser.DepartmentId is { } dept => await db.UserCompanies
+                .Where(x => x.CompanyId == companyId && x.DepartmentId == dept).Select(x => x.UserId).ToListAsync(ct),
+            DataScope.Branch when currentUser.BranchId is { } branch => await db.UserCompanies
+                .Where(x => x.CompanyId == companyId && x.BranchId == branch).Select(x => x.UserId).ToListAsync(ct),
+            DataScope.Department or DataScope.Branch => [me],
+            _ => null
+        };
+
+        return visibleOwners is null
+            ? db.Leads
+            : db.Leads.Where(x => (x.OwnerUserId != null && visibleOwners.Contains(x.OwnerUserId.Value)) || x.CreatedBy == me);
+    }
+
+    private async Task<string?> FindDuplicateAsync(LeadInfo info, long? excludeId, CancellationToken ct)
+    {
+        var phone = PhoneNumber.Normalize(info.Phone);
+        var email = info.Email?.Trim().ToLowerInvariant();
+        if (phone is null && string.IsNullOrEmpty(email)) return null;
+
+        return await db.Leads
+            .Where(x => x.Id != excludeId && x.Status != LeadStatuses.Converted && x.Status != LeadStatuses.Unqualified)
+            .Where(x => (phone != null && x.Phone == phone) || (email != null && email != "" && x.Email == email))
+            .Select(x => x.Code).FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<bool> SourceInvalidAsync(long? sourceId, CancellationToken ct)
+        => sourceId is { } id && !await db.LeadSources.AnyAsync(s => s.Id == id && s.IsActive, ct);
+
+    private static LeadInfo ToInfo(SaveLeadRequest r) => new(r.FullName, r.OrganizationName, r.Position,
+        r.Phone, r.Email, r.Street, r.SourceId, r.InterestNote, r.EstimatedValue);
+
+    private static LeadDto ToDto(Lead x) => new(x.Id, x.Code, x.FullName, x.OrganizationName, x.Position,
+        x.Phone, x.Email, x.Street, x.SourceId, x.InterestNote, x.EstimatedValue, x.Score, x.Status,
+        x.DisqualifyReason, x.OwnerUserId, x.CreatedAt, Convert.ToBase64String(x.RowVersion));
+}

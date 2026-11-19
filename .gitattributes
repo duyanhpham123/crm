@@ -1,0 +1,14 @@
+# Chuẩn hóa xuống dòng: trong repo luôn lưu LF, khi checkout Git tự đổi theo hệ điều hành.
+# Tránh diff "sửa toàn bộ file" khi người dùng Windows và Mac/Linux cùng làm.
+* text=auto
+
+# File chỉ chạy trên Windows giữ CRLF
+*.ps1   text eol=crlf
+*.slnx  text eol=crlf
+*.sln   text eol=crlf
+
+# File nhị phân
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.woff2 binary

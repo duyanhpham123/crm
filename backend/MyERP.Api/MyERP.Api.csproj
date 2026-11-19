@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!--
+    MyERP Web API - mô hình MVC, trả JSON cho frontend React.
+    Controllers/  nhận request, trả JSON       Models/      Entity + DTO + hằng số
+    Services/     nghiệp vụ                    Data/        DbContext, cấu hình bảng
+    Validators/   kiểm tra dữ liệu đầu vào     Infrastructure/  phân quyền, lỗi, cấu hình chung
+  -->
+  <PropertyGroup>
+    <UserSecretsId>myerp-api-6f1c2a</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="MyERP.Tests" />
+  </ItemGroup>
+</Project>
