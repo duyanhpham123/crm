@@ -6,6 +6,9 @@ import HomePage from './pages/HomePage'
 import ComingSoonPage from './pages/ComingSoonPage'
 import NotFoundPage from './pages/NotFoundPage'
 import LeadsPage from './pages/crm/LeadsPage'
+import CustomersPage from './pages/crm/CustomersPage'
+import CustomerDetailPage from './pages/crm/CustomerDetailPage'
+import OpportunitiesPage from './pages/crm/OpportunitiesPage'
 import UsersPage from './pages/users/UsersPage'
 import RolesPage from './pages/users/RolesPage'
 import RoleEditorPage from './pages/users/RoleEditorPage'
@@ -27,6 +30,9 @@ export default function App() {
           {/* CRM */}
           <Route path="crm" element={<Navigate to="/crm/leads" replace />} />
           <Route path="crm/leads" element={<LeadsPage />} />
+          <Route path="crm/opportunities" element={<OpportunitiesPage />} />
+          <Route path="crm/customers" element={<CustomersPage />} />
+          <Route path="crm/customers/:id" element={<CustomerDetailPage />} />
 
           {/* Người dùng, vai trò & quyền */}
           <Route path="users" element={<UsersPage />} />

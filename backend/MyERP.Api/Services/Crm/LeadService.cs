@@ -4,6 +4,7 @@ using MyERP.Api.Data;
 using MyERP.Api.Models;
 using MyERP.Api.Models.DTOs;
 using MyERP.Api.Models.Entities.Crm;
+using MyERP.Api.Models.Entities.MasterData;
 using MyERP.Api.Services.Common;
 
 namespace MyERP.Api.Services.Crm;
@@ -17,9 +18,15 @@ public interface ILeadService
     Task<Result<LeadDto>> ChangeStatusAsync(long id, ChangeLeadStatusRequest request, CancellationToken ct);
     Task<Result> DeleteAsync(long id, CancellationToken ct);
     Task<List<LeadSourceDto>> ListSourcesAsync(CancellationToken ct);
+    Task<Result<ConvertLeadResponse>> ConvertAsync(long id, ConvertLeadRequest request, CancellationToken ct);
 }
 
-public sealed class LeadService(AppDbContext db, ICurrentUser currentUser, IDocumentNumberService docNumbers) : ILeadService
+public sealed class LeadService(
+    AppDbContext db,
+    ICurrentUser currentUser,
+    IDocumentNumberService docNumbers,
+    IDataScopeService dataScope,
+    TimeProvider clock) : ILeadService
 {
     public async Task<PagedResult<LeadListItem>> ListAsync(LeadQuery q, CancellationToken ct)
     {
@@ -124,31 +131,97 @@ public sealed class LeadService(AppDbContext db, ICurrentUser currentUser, IDocu
         return Result.Success();
     }
 
+    /// <summary>
+    /// Chuyển đổi lead: tạo khách hàng mới (hoặc gắn vào khách hàng có sẵn) + người liên hệ
+    /// + cơ hội ở giai đoạn đầu của pipeline. Tất cả trong 1 transaction.
+    /// </summary>
+    public async Task<Result<ConvertLeadResponse>> ConvertAsync(long id, ConvertLeadRequest req, CancellationToken ct)
+    {
+        var lead = await (await ScopedAsync(Permissions.Crm.Edit, ct)).Include(l => l.Source).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (lead is null) return Error.NotFound("lead");
+        var can = lead.CanConvert();
+        if (can.IsFailure) return can.Error!;
+
+        Partner? existing = null;
+        if (req.ExistingCustomerId is { } customerId)
+        {
+            existing = await db.Partners.Include(p => p.Contacts).FirstOrDefaultAsync(p => p.Id == customerId && p.IsCustomer, ct);
+            if (existing is null) return Error.Validation("lead.customer_invalid", "Khách hàng được chọn không tồn tại.");
+        }
+
+        Stage? firstStage = null;
+        if (req.CreateOpportunity)
+        {
+            if (string.IsNullOrWhiteSpace(req.OpportunityName))
+                return Error.Validation("lead.opportunity_name_required", "Nhập tên cơ hội.");
+            firstStage = await db.Pipelines.Where(p => p.IsActive).OrderByDescending(p => p.IsDefault).ThenBy(p => p.Id)
+                .SelectMany(p => p.Stages).Where(s => s.StageType == OpportunityStatuses.Open).OrderBy(s => s.SortOrder)
+                .FirstOrDefaultAsync(ct);
+            if (firstStage is null) return Error.Validation("crm.no_pipeline", "Chưa cấu hình quy trình bán hàng.");
+        }
+
+        var companyId = currentUser.RequireCompanyId();
+        var now = clock.GetUtcNow().UtcDateTime;
+        var owner = lead.OwnerUserId ?? currentUser.RequireUserId();
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            // 1. Khách hàng: doanh nghiệp nếu lead có tên công ty, ngược lại là cá nhân
+            var partner = existing;
+            if (partner is null)
+            {
+                var isCompany = !string.IsNullOrWhiteSpace(lead.OrganizationName);
+                partner = Partner.CreateCustomer(companyId, await docNumbers.NextAsync("PARTNER", ct: ct), new PartnerInfo(
+                    isCompany ? Partner.Company : Partner.Individual,
+                    isCompany ? lead.OrganizationName! : lead.FullName,
+                    null, null,
+                    isCompany ? null : lead.Phone,
+                    isCompany ? null : lead.Email,
+                    null, null, lead.Street, null, owner, lead.Source?.Name, lead.InterestNote));
+                db.Partners.Add(partner);
+            }
+
+            // 2. Người liên hệ: người trong lead (nếu khách là doanh nghiệp)
+            PartnerContact? contact = null;
+            if (partner.PartnerType == Partner.Company)
+            {
+                contact = partner.Contacts.FirstOrDefault(c => !c.IsDeleted && c.Phone != null && c.Phone == lead.Phone)
+                    ?? partner.AddContact(new ContactInfo(lead.FullName, lead.Position, lead.Phone, lead.Email, null, false, null));
+            }
+            await db.SaveChangesAsync(ct);
+
+            // 3. Cơ hội
+            Opportunity? opportunity = null;
+            if (firstStage is not null)
+            {
+                var created = Opportunity.Create(companyId, await docNumbers.NextAsync("OPPORTUNITY", ct: ct), partner.Id, lead.Id, firstStage,
+                    new OpportunityInfo(req.OpportunityName!, contact?.Id, req.ExpectedRevenue ?? lead.EstimatedValue ?? 0, null,
+                        req.ExpectedCloseDate, 1, owner, lead.InterestNote), now);
+                if (created.IsFailure) return (Result<ConvertLeadResponse>)created.Error!;
+                opportunity = created.Value;
+                db.Opportunities.Add(opportunity);
+                await db.SaveChangesAsync(ct);
+            }
+
+            lead.MarkConverted(partner.Id, opportunity?.Id, now);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return (Result<ConvertLeadResponse>)new ConvertLeadResponse(partner.Id, partner.Code, opportunity?.Id, opportunity?.Code);
+        });
+    }
+
     public Task<List<LeadSourceDto>> ListSourcesAsync(CancellationToken ct)
         => db.LeadSources.Where(s => s.IsActive).OrderBy(s => s.Name)
             .Select(s => new LeadSourceDto(s.Id, s.Code, s.Name)).AsNoTracking().ToListAsync(ct);
 
-    /// <summary>
-    /// Lọc theo phạm vi dữ liệu của quyền: own = lead của mình, department = của cả phòng,
-    /// branch = cả chi nhánh, company/all = toàn công ty.
-    /// </summary>
+    /// <summary>Lọc theo phạm vi dữ liệu của quyền (xem DataScopeService).</summary>
     private async Task<IQueryable<Lead>> ScopedAsync(string permission, CancellationToken ct)
     {
-        var scope = await currentUser.GetScopeAsync(permission, ct) ?? throw new UnauthorizedAccessException();
         var me = currentUser.RequireUserId();
-        var companyId = currentUser.RequireCompanyId();
-
-        IReadOnlyList<long>? visibleOwners = scope switch
-        {
-            DataScope.Own => [me],
-            DataScope.Department when currentUser.DepartmentId is { } dept => await db.UserCompanies
-                .Where(x => x.CompanyId == companyId && x.DepartmentId == dept).Select(x => x.UserId).ToListAsync(ct),
-            DataScope.Branch when currentUser.BranchId is { } branch => await db.UserCompanies
-                .Where(x => x.CompanyId == companyId && x.BranchId == branch).Select(x => x.UserId).ToListAsync(ct),
-            DataScope.Department or DataScope.Branch => [me],
-            _ => null
-        };
-
+        var visibleOwners = await dataScope.VisibleOwnersAsync(permission, ct);
         return visibleOwners is null
             ? db.Leads
             : db.Leads.Where(x => (x.OwnerUserId != null && visibleOwners.Contains(x.OwnerUserId.Value)) || x.CreatedBy == me);
@@ -174,5 +247,5 @@ public sealed class LeadService(AppDbContext db, ICurrentUser currentUser, IDocu
 
     private static LeadDto ToDto(Lead x) => new(x.Id, x.Code, x.FullName, x.OrganizationName, x.Position,
         x.Phone, x.Email, x.Street, x.SourceId, x.InterestNote, x.EstimatedValue, x.Score, x.Status,
-        x.DisqualifyReason, x.OwnerUserId, x.CreatedAt, Convert.ToBase64String(x.RowVersion));
+        x.DisqualifyReason, x.OwnerUserId, x.ConvertedPartnerId, x.ConvertedOpportunityId, x.CreatedAt, Convert.ToBase64String(x.RowVersion));
 }

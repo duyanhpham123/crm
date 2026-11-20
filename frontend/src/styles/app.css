@@ -230,6 +230,81 @@ table.grid { width: 100%; border-collapse: collapse; }
 fieldset:disabled .grid.matrix input, fieldset:disabled select { cursor: not-allowed; }
 @media (max-width: 760px) { .form-grid.three { grid-template-columns: 1fr; } }
 
+/* ----- CRM: khách hàng, cơ hội, Kanban ----- */
+.grid tr.clickable { cursor: pointer; }
+.avatar.square { border-radius: 8px; font-size: 16px; }
+.avatar.tiny { width: 22px; height: 22px; font-size: 10px; flex-shrink: 0; }
+.owner { display: inline-flex; align-items: center; gap: 6px; }
+.overdue { color: var(--danger); }
+.kpi-line { margin: 4px 0 0; }
+.kpi-line b { color: var(--text); }
+.segmented { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+.segmented button { border: 0; background: var(--surface); color: var(--text-2); padding: 7px 14px; font: inherit; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.segmented button.on { background: var(--accent); color: #fff; }
+label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+label.check input { width: auto; height: auto; }
+.top-gap { margin-top: 12px; }
+.choice { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.choice label.check { margin-bottom: 4px; }
+.hint-inline { color: var(--muted); font-size: 12px; }
+.status-note { padding: 8px 12px; border-radius: var(--radius); background: var(--surface-2); margin-bottom: 12px; font-size: 13px; }
+.status-note.won { background: var(--success-bg); color: var(--success); }
+.status-note.lost { background: var(--danger-bg); color: var(--danger); }
+.convert-btn { margin-bottom: 12px; border-color: var(--success); color: var(--success); }
+.modal-foot .spacer { flex: 1; }
+.stars { display: flex; gap: 2px; height: 36px; align-items: center; }
+.stars button { border: 0; background: none; cursor: pointer; font-size: 22px; color: var(--border-strong); padding: 0 2px; }
+.stars button.on { color: #EF9F27; }
+
+/* Ô chọn khách hàng có tìm kiếm */
+.picker { position: relative; }
+.picker-list { position: absolute; z-index: 50; left: 0; right: 0; top: 100%; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); max-height: 260px; overflow-y: auto; }
+.picker-list li { padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--text); }
+.picker-list li:hover { background: var(--surface-2); }
+
+/* Hồ sơ khách hàng */
+.detail-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.detail-grid h2 { font-size: 15px; }
+.info { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; margin: 0 0 12px; }
+.info dt { color: var(--muted); }
+.info dd { margin: 0; }
+.note { background: var(--surface-2); padding: 8px 12px; border-radius: var(--radius); white-space: pre-wrap; }
+.card.stats { display: flex; flex-direction: column; gap: 14px; padding-bottom: 16px; }
+.card.stats div { display: flex; flex-direction: column; gap: 2px; }
+.card.stats b { font-size: 20px; font-weight: 600; }
+.card.stats b.won { color: var(--success); }
+.section-head { display: flex; align-items: center; justify-content: space-between; margin: 20px 0 8px; }
+.section-head h2 { margin: 0; font-size: 15px; }
+
+/* Bảng Kanban */
+.kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
+.kanban-col { background: var(--surface-2); border-radius: 12px; padding: 8px; min-height: 300px; border: 2px solid transparent; transition: border-color .15s, background .15s; }
+.kanban-col.drop { border-color: var(--accent); background: var(--accent-bg); }
+.kanban-col header { padding: 4px 6px 10px; }
+.kanban-col.won header .kanban-title span:first-child { color: var(--success); }
+.kanban-col.lost header .kanban-title span:first-child { color: var(--danger); }
+.kanban-title { display: flex; justify-content: space-between; font-weight: 600; }
+.kanban-title .count { background: var(--surface); border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 500; color: var(--text-2); }
+.kanban-items { display: flex; flex-direction: column; gap: 8px; }
+.kanban-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.kanban-card[draggable=true] { cursor: grab; }
+.kanban-card:hover { border-color: var(--border-strong); }
+.kanban-card:focus-visible { outline: 2px solid var(--accent); }
+.kanban-card.dragging { opacity: .4; }
+.card-title { font-weight: 500; margin-bottom: 2px; }
+.card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; }
+.card-meta b, .card-meta .small { white-space: nowrap; }
+.stage-move { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.stage-move label { flex: 1; min-width: 180px; }
+.stage-move .btn { margin-bottom: 12px; }
+.card-meta .spacer { flex: 1; }
+.prio { color: #EF9F27; font-size: 12px; letter-spacing: -1px; }
+.kanban-empty { text-align: center; padding: 20px 0; border: 1px dashed var(--border-strong); border-radius: 10px; }
+@media (max-width: 760px) {
+    .detail-grid { grid-template-columns: 1fr; }
+    .kanban { grid-auto-columns: 80%; }
+}
+
 /* ----- Nút trông như liên kết (VD tên lead trong bảng) ----- */
 button.link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
 button.link:hover { text-decoration: underline; }

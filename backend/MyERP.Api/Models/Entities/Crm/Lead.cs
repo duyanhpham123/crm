@@ -28,6 +28,7 @@ public sealed class Lead : AuditableEntity, ICompanyOwned
     public long? OwnerUserId { get; private set; }
     public string? DisqualifyReason { get; private set; }
     public long? ConvertedPartnerId { get; private set; }
+    public long? ConvertedOpportunityId { get; private set; }
     public DateTime? ConvertedAt { get; private set; }
 
     public LeadSource? Source { get; private set; }
@@ -63,6 +64,22 @@ public sealed class Lead : AuditableEntity, ICompanyOwned
         Status = status;
         DisqualifyReason = status == LeadStatuses.Unqualified ? reason!.Trim() : null;
         return Result.Success();
+    }
+
+    /// <summary>Chuyển đổi lead thành khách hàng (và cơ hội nếu có). Sau đó lead bị khóa.</summary>
+    public Result CanConvert() => Status switch
+    {
+        LeadStatuses.Converted => Error.Conflict("lead.converted", "Lead này đã được chuyển đổi."),
+        LeadStatuses.Unqualified => Error.Validation("lead.unqualified", "Lead đã đánh dấu không phù hợp. Đổi trạng thái trước khi chuyển đổi."),
+        _ => Result.Success()
+    };
+
+    public void MarkConverted(long partnerId, long? opportunityId, DateTime now)
+    {
+        Status = LeadStatuses.Converted;
+        ConvertedPartnerId = partnerId;
+        ConvertedOpportunityId = opportunityId;
+        ConvertedAt = now;
     }
 
     private void Apply(LeadInfo d)

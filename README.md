@@ -18,8 +18,8 @@ Trình duyệt ──► React (frontend/) ──HTTP JSON──► Controller �
 Cần: .NET SDK 10+, Node.js 20+, SQL Server (localhost, Windows Authentication).
 
 ```powershell
-# 1. Tạo database (chỉ làm 1 lần)
-.\database\run_all.ps1
+# 1. Tạo database (chỉ làm 1 lần). Thêm -Demo để có sẵn 15 lead mẫu cho dùng thử
+.\database\run_all.ps1 -Demo
 
 # 2. Chạy backend - cửa sổ terminal 1
 dotnet run --project backend/MyERP.Api --launch-profile http
@@ -33,6 +33,7 @@ npm run dev
 Mở **http://localhost:5173**. Lần đầu sẽ hiện màn hình thiết lập mật khẩu cho tài khoản `admin`.
 
 - Tài liệu API, thử API trực tiếp: http://localhost:5121/docs
+- **Database tạo trước ngày 20/11/2026** cần chạy bản nâng cấp: `sqlcmd -S localhost -E -d MyERP -I -f 65001 -i database/migrations/2026-11-20_sequence_counters.sql`
 - Vite tự chuyển `/api/*` sang backend nên không cần cấu hình CORS khi dev.
 - Sửa file React thì trình duyệt tự cập nhật ngay. Sửa C# thì dừng và chạy lại backend (hoặc dùng `dotnet watch`).
 
@@ -148,7 +149,10 @@ Chỉ cần chạy một ứng dụng .NET: nó phục vụ cả API lẫn giao 
 | Đăng nhập | JWT 30 phút + refresh token 14 ngày xoay vòng; dùng lại token cũ thì thu hồi cả phiên; khóa 15 phút sau 5 lần sai; giới hạn 10 request/phút/IP |
 | Phân quyền | Theo mã quyền + phạm vi dữ liệu (của tôi / phòng ban / chi nhánh / công ty). Frontend ẩn nút theo `can('crm.create')` |
 | Lưới ứng dụng | Chỉ hiện ứng dụng công ty đã bật và người dùng có quyền |
-| CRM - Lead | Danh sách, tìm không dấu, lọc, phân trang, tạo / sửa / xóa mềm, đổi trạng thái, chống trùng SĐT/email |
+| CRM - Lead | Danh sách, tìm không dấu, lọc, phân trang, tạo / sửa / xóa mềm, đổi trạng thái, chống trùng SĐT/email, **chuyển đổi thành khách hàng + cơ hội** |
+| CRM - Khách hàng | Doanh nghiệp / cá nhân, mã số thuế, nhóm, người phụ trách, nhiều người liên hệ (1 liên hệ chính); tìm theo tên, MST, SĐT, tên người liên hệ; hồ sơ khách hàng kèm cơ hội; chống trùng MST / SĐT |
+| CRM - Cơ hội | Bảng Kanban kéo thả theo giai đoạn (đổi được cả trong form - dùng trên điện thoại); tổng giá trị + doanh thu kỳ vọng mỗi cột; thất bại bắt buộc có lý do; quá hạn chốt tô đỏ; lưu lịch sử chuyển giai đoạn |
+| Đánh số chứng từ | Bộ đếm riêng từng kỳ - nhập chứng từ lùi ngày không bị trùng số |
 | Người dùng | Danh sách, lọc theo phòng ban / vai trò / trạng thái; tạo tài khoản (mật khẩu ban đầu có nút sinh ngẫu nhiên); sửa thông tin, phòng ban, vai trò (quyền mới có hiệu lực ngay); khóa / mở khóa (đăng xuất khỏi mọi thiết bị); đặt lại mật khẩu |
 | Đổi mật khẩu | Nút chìa khóa trên thanh trên cùng; các thiết bị khác bị đăng xuất, thiết bị hiện tại vẫn dùng tiếp |
 | Quy tắc an toàn | Không tự khóa / tự đổi vai trò của mình; chỉ quản trị hệ thống mới sửa được tài khoản quản trị hệ thống và gán vai trò hệ thống |

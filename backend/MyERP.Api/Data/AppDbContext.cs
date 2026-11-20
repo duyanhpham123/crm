@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MyERP.Api.Models.Entities;
 using MyERP.Api.Models.Entities.Core;
 using MyERP.Api.Models.Entities.Crm;
+using MyERP.Api.Models.Entities.MasterData;
 using MyERP.Api.Services.Common;
 
 namespace MyERP.Api.Data;
@@ -33,9 +34,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<CompanyApp> CompanyApps => Set<CompanyApp>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    // ----- md (danh mục dùng chung) -----
+    public DbSet<Partner> Partners => Set<Partner>();
+    public DbSet<PartnerContact> PartnerContacts => Set<PartnerContact>();
+    public DbSet<PartnerGroup> PartnerGroups => Set<PartnerGroup>();
+
     // ----- crm -----
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<LeadSource> LeadSources => Set<LeadSource>();
+    public DbSet<Opportunity> Opportunities => Set<Opportunity>();
+    public DbSet<Pipeline> Pipelines => Set<Pipeline>();
+    public DbSet<Stage> Stages => Set<Stage>();
+    public DbSet<LostReason> LostReasons => Set<LostReason>();
+    public DbSet<OpportunityStageHistory> OpportunityStageHistory => Set<OpportunityStageHistory>();
 
     // EF tham số hóa thuộc tính của context nên giá trị được đọc lại ở mỗi truy vấn.
     private long CurrentCompanyId => currentUser.CompanyId ?? 0;

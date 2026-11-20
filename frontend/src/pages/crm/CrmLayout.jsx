@@ -3,8 +3,8 @@ import ModuleLayout from '../../layouts/ModuleLayout'
 /** Menu bên trái của ứng dụng CRM. Làm xong chức năng nào thì bỏ "disabled" và thêm "to". */
 const CRM_MENU = [
   { to: '/crm/leads', icon: 'user-plus', label: 'Lead' },
-  { icon: 'layout-kanban', label: 'Cơ hội', disabled: true },
-  { icon: 'building', label: 'Khách hàng', disabled: true },
+  { to: '/crm/opportunities', icon: 'layout-kanban', label: 'Cơ hội' },
+  { to: '/crm/customers', icon: 'building', label: 'Khách hàng' },
   { icon: 'calendar-event', label: 'Hoạt động', disabled: true },
 ]
 

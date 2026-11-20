@@ -1,8 +1,11 @@
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { getErrorMessage } from '../../api/client'
 import { leadApi } from '../../api/leadApi'
 import Modal from '../../components/Modal'
-import { LEAD_STATUSES } from '../../constants'
+import { LEAD_STATUSES, PERMISSIONS } from '../../constants'
+import { useAuth } from '../../context/AuthContext'
+import ConvertLeadModal from './ConvertLeadModal'
 
 const EMPTY = {
   fullName: '', phone: '', email: '', organizationName: '', position: '',
@@ -32,6 +35,10 @@ export default function LeadFormModal({ lead: initialLead, sources, canEdit, onC
   const [busy, setBusy] = useState(false)
   const [askReason, setAskReason] = useState(false)
   const [reason, setReason] = useState('')
+  const [converting, setConverting] = useState(false)
+  const { can } = useAuth()
+  const navigate = useNavigate()
+  const canConvert = lead && !['converted', 'unqualified'].includes(lead.status) && can(PERMISSIONS.CRM_EDIT) && can(PERMISSIONS.CRM_CREATE)
 
   const isNew = !lead
   const editable = canEdit && lead?.status !== 'converted'
@@ -101,6 +108,27 @@ export default function LeadFormModal({ lead: initialLead, sources, canEdit, onC
           )}
           {lead.status === 'unqualified' && lead.disqualifyReason && (
             <p className="muted small">Lý do: {lead.disqualifyReason}</p>
+          )}
+          {lead.status === 'converted' && lead.convertedCustomerId && (
+            <div className="status-note won">
+              <i className="ti ti-circle-check" aria-hidden="true" /> Đã chuyển thành khách hàng.{' '}
+              <Link to={`/crm/customers/${lead.convertedCustomerId}`} onClick={onClose}>Mở hồ sơ khách hàng</Link>
+            </div>
+          )}
+          {canConvert && (
+            <button type="button" className="btn convert-btn" onClick={() => setConverting(true)}>
+              <i className="ti ti-arrow-big-right-lines" aria-hidden="true" /> Chuyển thành khách hàng
+            </button>
+          )}
+          {converting && (
+            <ConvertLeadModal
+              lead={lead}
+              onClose={() => setConverting(false)}
+              onConverted={(r) => {
+                onChanged()
+                navigate(`/crm/customers/${r.customerId}`)
+              }}
+            />
           )}
         </>
       )}

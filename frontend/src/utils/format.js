@@ -4,6 +4,22 @@ export function formatMoney(value) {
   return new Intl.NumberFormat('vi-VN').format(value) + ' ₫'
 }
 
+/** Rút gọn số tiền cho chỗ hẹp: 1250000000 → "1,25 tỷ", 350000000 → "350 tr" */
+export function formatMoneyShort(value) {
+  if (!value) return '0'
+  const fmt = (n) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(n)
+  if (value >= 1e9) return `${fmt(value / 1e9)} tỷ`
+  if (value >= 1e6) return `${fmt(value / 1e6)} tr`
+  return new Intl.NumberFormat('vi-VN').format(value)
+}
+
+/** Ngày dạng "2026-12-31" (DateOnly từ API) → "31/12/2026" */
+export function formatDateOnly(value) {
+  if (!value) return ''
+  const [y, m, d] = value.split('-')
+  return `${d}/${m}/${y}`
+}
+
 /** Ngày giờ UTC từ API → "19/11/2026" theo giờ máy người dùng */
 export function formatDate(value) {
   if (!value) return ''

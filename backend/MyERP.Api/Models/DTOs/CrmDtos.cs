@@ -37,6 +37,8 @@ public sealed record LeadDto(
     string Status,
     string? DisqualifyReason,
     long? OwnerUserId,
+    long? ConvertedCustomerId,
+    long? ConvertedOpportunityId,
     DateTime CreatedAt,
     string RowVersion);
 
@@ -56,3 +58,26 @@ public sealed record SaveLeadRequest(
 public sealed record ChangeLeadStatusRequest(string Status, string? Reason);
 
 public sealed record LeadSourceDto(long Id, string Code, string Name);
+
+/// <summary>POST /api/crm/leads/{id}/convert - ExistingCustomerId = null thì tạo khách hàng mới.</summary>
+public sealed record ConvertLeadRequest(
+    long? ExistingCustomerId,
+    bool CreateOpportunity,
+    string? OpportunityName,
+    decimal? ExpectedRevenue,
+    DateOnly? ExpectedCloseDate);
+
+public sealed record ConvertLeadResponse(long CustomerId, string CustomerCode, long? OpportunityId, string? OpportunityCode);
+
+// ----- Danh mục dùng cho các ô chọn của CRM -----
+
+public sealed record StageDto(long Id, string Name, int SortOrder, decimal Probability, string StageType, string? Color);
+
+public sealed record PipelineDto(long Id, string Name, bool IsDefault, IReadOnlyList<StageDto> Stages);
+
+public sealed record CrmLookups(
+    IReadOnlyList<LeadSourceDto> Sources,
+    IReadOnlyList<OptionDto> CustomerGroups,
+    IReadOnlyList<PipelineDto> Pipelines,
+    IReadOnlyList<OptionDto> LostReasons,
+    IReadOnlyList<OptionDto> Owners);

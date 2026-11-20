@@ -40,6 +40,7 @@ public static class ServiceRegistration
         // Common
         services.AddScoped<ICurrentUser, CurrentUser>();
         services.AddScoped<IDocumentNumberService, DocumentNumberService>();
+        services.AddScoped<IDataScopeService, DataScopeService>();
 
         // Auth
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -54,6 +55,8 @@ public static class ServiceRegistration
 
         // CRM
         services.AddScoped<ILeadService, LeadService>();
+        services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<IOpportunityService, OpportunityService>();
 
         // Validators: tự nạp mọi lớp AbstractValidator trong thư mục Validators/
         services.AddValidatorsFromAssemblyContaining<Program>(includeInternalTypes: true);

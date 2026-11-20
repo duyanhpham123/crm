@@ -235,13 +235,21 @@ CREATE TABLE core.Sequences (
     Prefix       VARCHAR(20)  NOT NULL,       -- 'BG'
     DatePattern  VARCHAR(10)  NULL,           -- 'yyMM' | 'yyyy' | NULL
     Padding      TINYINT      NOT NULL DEFAULT 5,
-    NextNumber   BIGINT       NOT NULL DEFAULT 1,
     ResetPolicy  VARCHAR(10)  NOT NULL DEFAULT 'monthly',
-    CurrentPeriod VARCHAR(10) NULL,           -- kỳ đang đánh số, đổi kỳ thì reset
     CONSTRAINT PK_Sequences PRIMARY KEY (Id),
     CONSTRAINT FK_Sequences_Companies FOREIGN KEY (CompanyId) REFERENCES core.Companies(Id),
     CONSTRAINT UQ_Sequences_Company_Code UNIQUE (CompanyId, Code),
     CONSTRAINT CK_Sequences_Reset CHECK (ResetPolicy IN ('never','yearly','monthly'))
+);
+
+/* Bộ đếm RIÊNG cho từng kỳ: tháng 10 và tháng 11 đếm độc lập.
+   Nhờ vậy nhập chứng từ lùi ngày (VD đang tháng 11 nhập hóa đơn tháng 10) vẫn không trùng số. */
+CREATE TABLE core.SequenceCounters (
+    SequenceId  BIGINT      NOT NULL,
+    Period      VARCHAR(10) NOT NULL,         -- '202611' | '2026' | 'ALL'
+    NextNumber  BIGINT      NOT NULL,
+    CONSTRAINT PK_SequenceCounters PRIMARY KEY (SequenceId, Period),
+    CONSTRAINT FK_SequenceCounters_Sequences FOREIGN KEY (SequenceId) REFERENCES core.Sequences(Id) ON DELETE CASCADE
 );
 GO
 
@@ -256,33 +264,40 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
     DECLARE @d DATE = ISNULL(@DocDate, CAST(SYSDATETIME() AS DATE));
-    DECLARE @Prefix VARCHAR(20), @Pattern VARCHAR(10), @Padding TINYINT,
-            @Reset VARCHAR(10), @Period VARCHAR(10), @Num BIGINT, @NewPeriod VARCHAR(10);
+    DECLARE @SeqId BIGINT, @Prefix VARCHAR(20), @Pattern VARCHAR(10), @Padding TINYINT,
+            @Reset VARCHAR(10), @Period VARCHAR(10), @Num BIGINT;
 
     BEGIN TRAN;
-        SELECT @Prefix = Prefix, @Pattern = DatePattern, @Padding = Padding,
-               @Reset = ResetPolicy, @Period = CurrentPeriod, @Num = NextNumber
+        -- Khóa dòng cấu hình: các lệnh lấy số cùng dãy phải xếp hàng, không bao giờ trùng
+        SELECT @SeqId = Id, @Prefix = Prefix, @Pattern = DatePattern, @Padding = Padding, @Reset = ResetPolicy
         FROM core.Sequences WITH (UPDLOCK, HOLDLOCK)
         WHERE CompanyId = @CompanyId AND Code = @Code;
 
-        IF @Prefix IS NULL
+        IF @SeqId IS NULL
         BEGIN
             ROLLBACK;
             THROW 50001, N'Chưa cấu hình dãy số chứng từ cho mã này.', 1;
         END
 
-        SET @NewPeriod = CASE @Reset WHEN 'yearly'  THEN FORMAT(@d, 'yyyy')
-                                     WHEN 'monthly' THEN FORMAT(@d, 'yyyyMM')
-                                     ELSE 'ALL' END;
-        IF ISNULL(@Period, '') <> @NewPeriod SET @Num = 1;
+        -- Kỳ đánh số lấy theo NGÀY CHỨNG TỪ (không phải ngày hiện tại)
+        SET @Period = CASE @Reset WHEN 'yearly'  THEN FORMAT(@d, 'yyyy')
+                                  WHEN 'monthly' THEN FORMAT(@d, 'yyyyMM')
+                                  ELSE 'ALL' END;
 
-        UPDATE core.Sequences
-        SET NextNumber = @Num + 1, CurrentPeriod = @NewPeriod
-        WHERE CompanyId = @CompanyId AND Code = @Code;
+        UPDATE core.SequenceCounters
+        SET @Num = NextNumber, NextNumber = NextNumber + 1
+        WHERE SequenceId = @SeqId AND Period = @Period;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            SET @Num = 1;
+            INSERT core.SequenceCounters (SequenceId, Period, NextNumber) VALUES (@SeqId, @Period, 2);
+        END
     COMMIT;
 
+    -- Lưu ý: FORMAT(@d, NULL) KHÔNG trả NULL mà trả chuỗi ngày giờ đầy đủ, nên phải kiểm tra NULL trước
     SET @DocNo = @Prefix
-               + ISNULL(FORMAT(@d, @Pattern), '')
+               + CASE WHEN @Pattern IS NULL OR @Pattern = '' THEN '' ELSE FORMAT(@d, @Pattern) END
                + '-' + RIGHT(REPLICATE('0', @Padding) + CAST(@Num AS VARCHAR(20)), @Padding);
 END
 GO

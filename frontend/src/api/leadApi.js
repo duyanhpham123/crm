@@ -23,6 +23,9 @@ export const leadApi = {
   /** DELETE /api/crm/leads/{id} */
   remove: (id) => api.delete(`/api/crm/leads/${id}`),
 
+  /** POST /api/crm/leads/{id}/convert  body: { existingCustomerId, createOpportunity, opportunityName, expectedRevenue, expectedCloseDate } */
+  convert: (id, body) => api.post(`/api/crm/leads/${id}/convert`, body).then((r) => r.data),
+
   /** GET /api/crm/lead-sources */
   sources: () => api.get('/api/crm/lead-sources').then((r) => r.data),
 }

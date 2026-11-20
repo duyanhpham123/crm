@@ -43,6 +43,13 @@ public sealed class LeadsController(ILeadService leads) : ApiControllerBase
     public async Task<IActionResult> ChangeStatus(long id, ChangeLeadStatusRequest request, CancellationToken ct)
         => FromResult(await leads.ChangeStatusAsync(id, request, ct), Ok);
 
+    /// <summary>POST /api/crm/leads/5/convert - chuyển lead thành khách hàng (+ cơ hội).</summary>
+    [HttpPost("{id:long}/convert")]
+    [HasPermission(Permissions.Crm.Edit)]
+    [HasPermission(Permissions.Crm.Create)]
+    public async Task<IActionResult> Convert(long id, ConvertLeadRequest request, CancellationToken ct)
+        => FromResult(await leads.ConvertAsync(id, request, ct), Ok);
+
     /// <summary>DELETE /api/crm/leads/5 (xóa mềm)</summary>
     [HttpDelete("{id:long}")]
     [HasPermission(Permissions.Crm.Delete)]

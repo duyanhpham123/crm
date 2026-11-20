@@ -50,7 +50,7 @@ public class ConventionTests
         var bad = Controllers
             .Where(c => (c.GetCustomAttribute<RouteAttribute>()?.Template ?? "") is var r
                         && r.StartsWith("api/") && r.Count(ch => ch == '/') >= 2 && !PublicRoutes.Contains(r))
-            .Where(c => c.GetCustomAttribute<HasPermissionAttribute>() is null)
+            .Where(c => !c.GetCustomAttributes<HasPermissionAttribute>().Any())
             .Select(c => c.Name).ToList();
         Assert.True(bad.Count == 0, $"Thiếu [HasPermission] trên controller: {string.Join(", ", bad)}");
     }
@@ -60,10 +60,10 @@ public class ConventionTests
     {
         // POST/PUT/DELETE trong controller nghiệp vụ phải có [HasPermission] riêng (create/edit/delete)
         var bad = Controllers
-            .Where(c => c.GetCustomAttribute<HasPermissionAttribute>() is not null)
+            .Where(c => c.GetCustomAttributes<HasPermissionAttribute>().Any())
             .SelectMany(c => c.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
                 .Where(m => m.GetCustomAttributes<HttpMethodAttribute>().Any(h => h.HttpMethods.Any(v => v is "POST" or "PUT" or "DELETE" or "PATCH")))
-                .Where(m => m.GetCustomAttribute<HasPermissionAttribute>() is null)
+                .Where(m => !m.GetCustomAttributes<HasPermissionAttribute>().Any())
                 .Select(m => $"{c.Name}.{m.Name}"))
             .ToList();
         Assert.True(bad.Count == 0, $"Action ghi dữ liệu thiếu [HasPermission]: {string.Join(", ", bad)}");
