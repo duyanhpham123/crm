@@ -14,6 +14,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         {
             DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "Dữ liệu đã bị người khác thay đổi. Hãy tải lại rồi thử lại."),
             UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "Bạn không có quyền thực hiện thao tác này."),
+            KeyNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             _ => (StatusCodes.Status500InternalServerError, "Hệ thống gặp lỗi. Vui lòng thử lại sau.")
         };
 

@@ -6,6 +6,7 @@ Hệ thống quản trị doanh nghiệp (ERP/CRM) cho tất cả phòng ban.
 |---|---|---|
 | Backend | ASP.NET Core 10 Web API, mô hình **MVC**, trả **JSON** | `backend/` |
 | Frontend | **React 19** + Vite + React Router + Axios | `frontend/` |
+| Website bán hàng mẫu | **Next.js 15** đọc dữ liệu từ ERP (nhiều website dùng chung 1 ERP) | `storefront/` |
 | Database | SQL Server, 157 bảng, 15 schema | `database/MyERP.sql` |
 
 ```
@@ -41,7 +42,10 @@ Mở **http://localhost:5173**. Lần đầu sẽ hiện màn hình thiết lậ
     Đổi cấu trúc: sửa script trong `source/` + viết migration cho DB đang chạy, rồi chạy lại `cap-nhat-file-sql.cmd`.
   - Tạo DB sạch không có dữ liệu bán hàng: `.\database\source\run_all.ps1` (thêm `-Demo` để có dữ liệu mẫu).
 - **Database tạo từ trước** cần chạy các bản nâng cấp trong `database/source/migrations/` theo thứ tự ngày (chạy lại nhiều lần không sao), ví dụ:
-  `sqlcmd -S localhost -E -d MyERP -I -f 65001 -i database/source/migrations/2026-11-23_phase3.sql`
+  `sqlcmd -S localhost -E -d MyERP -I -f 65001 -i database/source/migrations/2026-11-24_phase4.sql` (bản mới nhất - quyền Chat / Tài liệu / Dự án cho mọi vai trò; dữ liệu mẫu đợt 4: `database/source/44_demo_phase4.sql`)
+- Dữ liệu mẫu đợt 4 tạo 6 tài khoản nhân viên (nhung, chau, ducanh, thaovy, tung, mai) **chưa có mật khẩu** - vào app Người dùng đặt mật khẩu nếu muốn đăng nhập bằng các tài khoản này.
+- Nâng cấp nhiều website: `.../migrations/2026-11-25_multisite.sql`; dữ liệu mẫu 2 website: `database/source/45_demo_multisite.sql`. Hướng dẫn nối website Next.js: `storefront/README.md`.
+- File tải lên ở app Tài liệu lưu trong `backend/MyERP.Api/App_Data/uploads` (không commit; đổi chỗ bằng cấu hình `Storage:Root`, giới hạn `Storage:MaxUploadMb`, mặc định 20 MB). Mang sang máy khác thì chép cả thư mục này.
 - Quy tắc tính lương (giảm trừ gia cảnh, biểu thuế TNCN, tỷ lệ bảo hiểm) nằm ở `backend/MyERP.Api/Models/Entities/Hr/Payroll.cs` (`PayrollRules`) - kiểm tra lại theo quy định hiện hành trước khi trả lương thật.
 - Vite tự chuyển `/api/*` sang backend nên không cần cấu hình CORS khi dev.
 - Sửa file React thì trình duyệt tự cập nhật ngay. Sửa C# thì dừng và chạy lại backend (hoặc dùng `dotnet watch`).
@@ -173,6 +177,11 @@ Chỉ cần chạy một ứng dụng .NET: nó phục vụ cả API lẫn giao 
 | CSKH | Phiếu hỗ trợ / khiếu nại / bảo hành / đổi trả từ mọi kênh, gắn khách + đơn hàng; hạn phản hồi và hạn xử lý theo mức ưu tiên (SLA), báo quá hạn; trao đổi với khách + ghi chú nội bộ; giao người xử lý; đánh giá hài lòng 1-5 sao; tạo phiếu ngay từ đơn hàng |
 | Nhân sự | Hồ sơ nhân viên, hợp đồng & lương (đổi lương tự lập hợp đồng mới), gắn tài khoản đăng nhập; chấm công tháng dạng bảng (bấm ô để sửa, chấm đủ công, check-in / check-out, đi trễ, tăng ca); đơn nghỉ phép có duyệt, quỹ phép năm (duyệt thì tự chấm công "nghỉ phép"); bảng lương tháng: công thực tế, phép có lương, tăng ca 150%, BH 10,5%, thuế TNCN lũy tiến, thưởng / tạm ứng; duyệt rồi chi lương tạo phiếu chi bên Kế toán |
 | Marketing | Chiến dịch quảng cáo (Facebook, TikTok, Google...): ngân sách, chi phí / hiển thị / click / lead theo ngày, CTR, chi phí mỗi lead, doanh thu và ROAS qua mã giảm giá của chiến dịch; mã giảm giá (% có trần, số tiền, miễn phí ship; đơn tối thiểu, kênh, thời gian, số lượt) áp dụng ngay ở màn hình tạo đơn; phân nhóm khách VIP / thân thiết / mới / lâu không mua |
+| Dự án & công việc | Bảng Kanban công việc dùng chung (Cần làm / Đang làm / Chờ duyệt / Hoàn thành) kéo thả; giao việc cho người hoặc phòng ban, ưu tiên, hạn chót (quá hạn tô đỏ); checklist tự tính tiến độ; ghi giờ làm; dự án có thành viên, ngân sách, tiến độ = trung bình tiến độ công việc. Nhân viên chỉ thấy việc của mình và dự án mình tham gia |
+| Tài liệu | Thư mục chung / riêng phòng ban; hợp đồng có số hiệu, đối tác, giá trị, ngày hiệu lực - hết hạn (báo trước 30 ngày, tự coi là hết hạn); tải file nhiều phiên bản (PDF, Word, Excel, ảnh, ZIP), tải về; chặn file lạ |
+| Chat nội bộ | Kênh toàn công ty, nhóm tự tạo, nhắn riêng 1-1; trả lời trích dẫn, sửa / thu hồi tin, thả biểu tượng; số tin chưa đọc; tự cập nhật tin mới vài giây một lần; dùng tốt trên điện thoại |
+| Website | Thông tin website, bật / tắt mẫu sản phẩm hiện trên web (giá, tồn lấy từ Kho); bài viết blog + trang tĩnh (đường dẫn tự tạo, SEO, xem trước, nháp / đăng); menu đầu / chân trang; liên hệ khách gửi từ web → tạo Lead CRM (trùng SĐT thì gắn lead cũ). API công khai cho web bán hàng: `/api/public/site`, `products`, `posts`, `pages/{slug}`, `contact` (chống spam bằng ô ẩn + giới hạn theo IP) |
+| Nhiều website tự code | Mỗi website (Next.js...) có khóa API riêng, chọn mẫu bày bán, giá riêng, nổi bật, menu, bài viết, phí ship riêng; website không có database - đọc thẳng ERP qua `/api/public` (khóa gửi trong header `X-Site-Key`, chỉ dùng ở máy chủ website). Đơn đặt từ web vào app Đơn hàng (Nháp, kênh Website), giá / tồn / mã giảm giá tính lại ở ERP, khách tìm theo SĐT. Sửa sản phẩm, giá, tồn kho, bài viết, menu ở ERP → webhook báo website làm mới ngay |
 | Cài đặt | Thông tin cửa hàng + chính sách đổi trả (in trên báo giá), phòng ban, kho hàng, bật / tắt ứng dụng trên màn hình chính, quy tắc đánh số chứng từ |
 | Đánh số chứng từ | Bộ đếm riêng từng kỳ - nhập chứng từ lùi ngày không bị trùng số |
 | Người dùng | Danh sách, lọc theo phòng ban / vai trò / trạng thái; tạo tài khoản (mật khẩu ban đầu có nút sinh ngẫu nhiên); sửa thông tin, phòng ban, vai trò (quyền mới có hiệu lực ngay); khóa / mở khóa (đăng xuất khỏi mọi thiết bị); đặt lại mật khẩu |

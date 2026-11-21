@@ -30,6 +30,7 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         e.Property(x => x.Barcode).HasMaxLength(50).IsUnicode(false);
         e.Property(x => x.Name).HasMaxLength(255);
         e.Property(x => x.Size).HasMaxLength(20).IsUnicode(false);
+        e.Property(x => x.WebSlug).HasMaxLength(255).IsUnicode(false);
     }
 }
 

@@ -1,0 +1,118 @@
+/* Giao diện mẫu - đổi thoải mái. Màu chủ đạo lấy từ ERP (Website > Thông tin website > Màu chủ đạo) qua biến --brand. */
+:root {
+  --brand: #d4537e;
+  --text: #1f1f1d;
+  --muted: #77756f;
+  --bg: #faf9f7;
+  --surface: #ffffff;
+  --border: #e6e3dd;
+  --ok: #0f6e56;
+  --danger: #b42318;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--bg); line-height: 1.5; }
+a { color: inherit; }
+img { max-width: 100%; display: block; }
+h1 { font-size: 28px; margin: 8px 0 16px; }
+h2 { font-size: 20px; margin: 28px 0 12px; }
+.container { width: min(1180px, 100% - 32px); margin: 0 auto; }
+.main { min-height: 60vh; padding: 16px 0 48px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.center { text-align: center; padding: 48px 0; }
+.pre { white-space: pre-wrap; }
+.alert { background: #fff4e5; border: 1px solid #f5c26b; padding: 12px 14px; border-radius: 10px; }
+.error { color: var(--danger); }
+.ok { color: var(--ok); }
+.out { color: var(--danger); }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 42px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-weight: 500; cursor: pointer; text-decoration: none; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.block { width: 100%; }
+.link { background: none; border: 0; cursor: pointer; color: var(--muted); font-size: 16px; }
+input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: var(--surface); color: var(--text); }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; margin-bottom: 12px; }
+label.radio { flex-direction: row; align-items: center; gap: 8px; }
+label.radio input { width: auto; }
+fieldset { border: 0; padding: 0; margin: 0 0 12px; }
+legend { font-size: 14px; margin-bottom: 6px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+.card.success { border-color: var(--ok); }
+.card h2 { margin-top: 0; }
+
+/* Đầu / chân trang */
+.site-header { background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+.header-row { display: flex; align-items: center; gap: 20px; min-height: 64px; flex-wrap: wrap; }
+.logo { font-weight: 700; font-size: 20px; text-decoration: none; color: var(--brand); }
+.logo img { height: 40px; }
+.main-nav { display: flex; gap: 18px; flex: 1; flex-wrap: wrap; }
+.main-nav a { text-decoration: none; font-weight: 500; }
+.main-nav a:hover { color: var(--brand); }
+.cart-btn { text-decoration: none; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+.badge { background: var(--brand); color: #fff; border-radius: 999px; padding: 0 8px; font-size: 12px; }
+.site-footer { background: #1f1f1d; color: #ddd; padding: 32px 0; font-size: 14px; }
+.footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
+.site-footer .muted { color: #aaa; }
+.socials { display: flex; gap: 12px; }
+
+/* Trang chủ */
+.hero { text-align: center; padding: 48px 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 14%, white), var(--surface)); border-radius: 20px; }
+.hero h1 { font-size: 40px; margin: 0 0 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 14px; text-decoration: none; font: inherit; cursor: pointer; color: var(--text); }
+.chip.on { border-color: var(--brand); background: var(--brand); color: #fff; }
+.chip.disabled { opacity: .45; text-decoration: line-through; }
+
+/* Sản phẩm */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; }
+.p-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; text-decoration: none; display: flex; flex-direction: column; transition: transform .15s; }
+.p-card:hover { transform: translateY(-2px); }
+.p-img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: #f1efea; }
+.p-img.placeholder { display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 700; color: color-mix(in srgb, var(--brand) 70%, black);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--brand) 18%, white), #f1efea); }
+.p-img.large { border-radius: 16px; }
+.p-body { padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.p-name { font-weight: 600; }
+.p-price { color: var(--brand); font-weight: 700; }
+.p-price.big { font-size: 26px; margin: 8px 0 16px; }
+.tag.out { align-self: flex-start; font-size: 12px; background: #fde8e8; color: var(--danger); border-radius: 999px; padding: 0 8px; }
+.filters { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.search-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.search-form input { flex: 1; min-width: 180px; }
+.search-form select { width: auto; }
+.crumbs { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+.crumbs a { color: var(--muted); }
+.product-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.buy-box { display: flex; flex-direction: column; gap: 14px; }
+.opt { display: flex; flex-direction: column; gap: 6px; }
+.qty-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.qty-row label { margin: 0; width: 110px; }
+.description h2 { font-size: 16px; }
+
+/* Giỏ hàng */
+.checkout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.lines { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+.lines td { padding: 10px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.lines .num { text-align: right; white-space: nowrap; }
+.lines .total td { font-weight: 700; font-size: 18px; border-bottom: 0; }
+.qty { width: 70px; }
+.promo { display: flex; gap: 8px; margin: 8px 0; }
+
+/* Blog */
+.post-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+.post-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; text-decoration: none; display: flex; flex-direction: column; gap: 6px; }
+.article { max-width: 760px; }
+.article .lead { font-size: 18px; color: var(--muted); }
+.article .cover { border-radius: 16px; margin: 12px 0; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+
+@media (max-width: 800px) {
+  .product-detail, .checkout, .two-col { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 30px; }
+  .main-nav { order: 3; width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 8px; }
+  .main-nav a { white-space: nowrap; }
+}

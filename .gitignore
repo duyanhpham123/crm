@@ -496,3 +496,6 @@ backend/MyERP.Api/wwwroot/
 # C?u hình Claude Code cá nhân (launch.json dùng chung thì v?n commit)
 .claude/settings.local.json
 
+
+# File ngÆ°á»i dÃ¹ng táº£i lÃªn (app TÃ i liá»‡u) - khÃ´ng commit
+backend/MyERP.Api/App_Data/

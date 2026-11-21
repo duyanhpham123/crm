@@ -17,7 +17,8 @@ public class ConventionTests
         .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
         .ToArray();
 
-    private static readonly string[] PublicRoutes = ["api/auth"];
+    // api/public: API cho website bán hàng (sản phẩm, bài viết, form liên hệ) - khách vãng lai không đăng nhập
+    private static readonly string[] PublicRoutes = ["api/auth", "api/public"];
 
     [Fact]
     public void All_controllers_inherit_ApiControllerBase()

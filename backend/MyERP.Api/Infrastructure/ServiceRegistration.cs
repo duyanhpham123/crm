@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -22,6 +23,10 @@ using MyERP.Api.Services.Logistics;
 using MyERP.Api.Services.Support;
 using MyERP.Api.Services.Hr;
 using MyERP.Api.Services.Marketing;
+using MyERP.Api.Services.Projects;
+using MyERP.Api.Services.Documents;
+using MyERP.Api.Services.Chat;
+using MyERP.Api.Services.Website;
 using MyERP.Api.Services.Settings;
 
 namespace MyERP.Api.Infrastructure;
@@ -32,6 +37,8 @@ namespace MyERP.Api.Infrastructure;
 public static class ServiceRegistration
 {
     public const string AuthRateLimitPolicy = "auth";
+    /// <summary>Form liên hệ / đặt hàng từ website: giới hạn theo website + IP khách (website gửi qua header X-Client-IP).</summary>
+    public const string PublicRateLimitPolicy = "public";
     public const string CorsPolicy = "frontend";
 
     /// <summary>Database + các Service nghiệp vụ.</summary>
@@ -42,10 +49,11 @@ public static class ServiceRegistration
         services.AddSingleton(TimeProvider.System);
 
         services.AddScoped<AuditInterceptor>();
+        services.AddScoped<WebChangeInterceptor>();
         services.AddDbContext<AppDbContext>((sp, options) => options
             .UseSqlServer(config.GetConnectionString("MyERP") ?? throw new InvalidOperationException("Thiếu ConnectionStrings:MyERP"),
                 sql => sql.EnableRetryOnFailure(3))
-            .AddInterceptors(sp.GetRequiredService<AuditInterceptor>()));
+            .AddInterceptors(sp.GetRequiredService<AuditInterceptor>(), sp.GetRequiredService<WebChangeInterceptor>()));
 
         // Common
         services.AddScoped<ICurrentUser, CurrentUser>();
@@ -83,6 +91,17 @@ public static class ServiceRegistration
         services.AddScoped<IPayrollService, PayrollService>();
         services.AddScoped<IMarketingService, MarketingService>();
         services.AddScoped<ISettingsService, SettingsService>();
+        services.AddScoped<IProjectService, ProjectService>();
+        services.AddSingleton<IFileStorage, LocalFileStorage>();
+        services.AddScoped<IDocumentService, DocumentService>();
+        services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<IWebsiteService, WebsiteService>();
+        services.AddScoped<IPublicWebsiteService, PublicWebsiteService>();
+        // Báo website tự code làm mới khi dữ liệu đổi: hàng đợi trong bộ nhớ + chạy nền
+        services.AddHttpClient(RevalidationDispatcher.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(8));
+        services.AddSingleton<RevalidationDispatcher>();
+        services.AddSingleton<IRevalidationQueue>(sp => sp.GetRequiredService<RevalidationDispatcher>());
+        services.AddHostedService(sp => sp.GetRequiredService<RevalidationDispatcher>());
 
         // Validators: tự nạp mọi lớp AbstractValidator trong thư mục Validators/
         services.AddValidatorsFromAssemblyContaining<Program>(includeInternalTypes: true);
@@ -111,7 +130,9 @@ public static class ServiceRegistration
                     NameClaimType = ErpClaims.UserName,
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
-            });
+            })
+            // Website tự code gọi /api/public/* bằng khóa riêng (header X-Site-Key) - chỉ áp nơi ghi rõ scheme này
+            .AddScheme<AuthenticationSchemeOptions, SiteKeyAuthenticationHandler>(SiteKeyDefaults.Scheme, null);
 
         services.AddAuthorization();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
@@ -131,6 +152,9 @@ public static class ServiceRegistration
         services.AddRateLimiter(o =>
         {
             o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            o.AddPolicy(PublicRateLimitPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
+                $"{http.Request.Headers[SiteKeyDefaults.Header].ToString().PadRight(12)[..12]}|{http.Request.Headers[SiteKeyDefaults.ClientIpHeader].FirstOrDefault() ?? http.Connection.RemoteIpAddress?.ToString()}",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = config.GetValue("RateLimit:PublicPermitLimit", 20), Window = TimeSpan.FromMinutes(1) }));
             o.AddPolicy(AuthRateLimitPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
                 http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = TimeSpan.FromMinutes(1) }));

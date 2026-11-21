@@ -4,14 +4,36 @@
     {
       "name": "api",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "backend/MyERP.Api", "--launch-profile", "http"],
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "backend/MyERP.Api",
+        "--launch-profile",
+        "http"
+      ],
       "port": 5121
     },
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "store",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "storefront",
+        "run",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }

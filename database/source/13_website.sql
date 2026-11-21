@@ -18,11 +18,36 @@ CREATE TABLE web.Sites (
     WarehouseId     BIGINT        NULL,          -- kho trừ tồn cho đơn online
     Settings        NVARCHAR(MAX) NULL,          -- JSON: màu, script GA, pixel...
     IsActive        BIT           NOT NULL DEFAULT 1,
+    -- Website tự code (Next.js...) gọi API bằng khóa riêng; ERP lưu SHA-256 của khóa, khóa gốc chỉ hiện 1 lần
+    ApiKeyHash       CHAR(64)      NULL,
+    ApiKeyPrefix     VARCHAR(16)   NULL,
+    ApiKeyCreatedAt  DATETIME2(3)  NULL,
+    RevalidateUrl    VARCHAR(500)  NULL,     -- webhook báo website làm mới trang khi dữ liệu đổi
+    RevalidateSecret VARCHAR(100)  NULL,
+    LastSyncAt       DATETIME2(3)  NULL,
+    LastSyncStatus   NVARCHAR(300) NULL,
+    BotUserId        BIGINT        NULL,     -- tài khoản (không đăng nhập được) ghi người tạo cho đơn online
     CONSTRAINT PK_Sites PRIMARY KEY (Id),
     CONSTRAINT FK_Sites_Companies FOREIGN KEY (CompanyId) REFERENCES core.Companies(Id),
     CONSTRAINT FK_Sites_PriceLists FOREIGN KEY (PriceListId) REFERENCES md.PriceLists(Id),
     CONSTRAINT FK_Sites_Warehouses FOREIGN KEY (WarehouseId) REFERENCES inv.Warehouses(Id),
-    CONSTRAINT UQ_Sites_Domain UNIQUE (Domain)
+    CONSTRAINT UQ_Sites_Domain UNIQUE (Domain),
+    CONSTRAINT FK_Sites_BotUser FOREIGN KEY (BotUserId) REFERENCES core.Users(Id)
+);
+CREATE UNIQUE INDEX UX_Sites_ApiKeyHash ON web.Sites(ApiKeyHash) WHERE ApiKeyHash IS NOT NULL;
+
+/* Mẫu sản phẩm bày bán trên từng website (mỗi web chọn mẫu riêng, giá riêng nếu cần) */
+CREATE TABLE web.SiteProducts (
+    SiteId        BIGINT        NOT NULL,
+    ModelId       BIGINT        NOT NULL,
+    PriceOverride DECIMAL(18,2) NULL,        -- NULL = giá bán của từng biến thể
+    IsFeatured    BIT           NOT NULL DEFAULT 0,
+    SortOrder     INT           NOT NULL DEFAULT 0,
+    AddedAt       DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_SiteProducts PRIMARY KEY (SiteId, ModelId),
+    CONSTRAINT FK_SiteProducts_Sites FOREIGN KEY (SiteId) REFERENCES web.Sites(Id) ON DELETE CASCADE,
+    CONSTRAINT FK_SiteProducts_Models FOREIGN KEY (ModelId) REFERENCES md.ProductModels(Id),
+    CONSTRAINT CK_SiteProducts_Price CHECK (PriceOverride IS NULL OR PriceOverride >= 0)
 );
 
 CREATE TABLE web.Pages (

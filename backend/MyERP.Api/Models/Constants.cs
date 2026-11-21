@@ -99,6 +99,39 @@ public static class Permissions
         public const string Edit = "support.edit";
     }
 
+    public static class Projects
+    {
+        public const string View = "project.view";
+        public const string Create = "project.create";
+        public const string Edit = "project.edit";
+        public const string Delete = "project.delete";
+    }
+
+    public static class Documents
+    {
+        public const string View = "document.view";
+        public const string Create = "document.create";
+        public const string Edit = "document.edit";
+        public const string Delete = "document.delete";
+    }
+
+    public static class Chat
+    {
+        public const string View = "chat.view";
+        /// <summary>Gửi tin, tạo nhóm, nhắn riêng.</summary>
+        public const string Create = "chat.create";
+        /// <summary>Sửa / thu hồi tin của mình, thả biểu tượng.</summary>
+        public const string Edit = "chat.edit";
+    }
+
+    public static class Website
+    {
+        public const string View = "website.view";
+        public const string Create = "website.create";
+        public const string Edit = "website.edit";
+        public const string Delete = "website.delete";
+    }
+
     /// <summary>Các hành động chuẩn của mọi ứng dụng (cột trong ma trận phân quyền).</summary>
     public static readonly IReadOnlyList<string> StandardActions = ["view", "create", "edit", "delete", "approve", "export"];
 

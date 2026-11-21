@@ -30,6 +30,10 @@ import { TicketDetailPage, TicketsPage } from './pages/support/SupportPages'
 import { AttendancePage, EmployeesPage, LeavesPage, PayrollDetailPage, PayrollListPage } from './pages/hr/HrPages'
 import { CampaignDetailPage, CampaignsPage, PromotionsPage, SegmentsPage } from './pages/marketing/MarketingPages'
 import { AppsSettingsPage, CompanySettingsPage, DepartmentsPage, NumberingPage, WarehousesPage } from './pages/settings/SettingsPages'
+import { ProjectDetailPage, ProjectsPage, TasksPage } from './pages/projects/ProjectPages'
+import { DocumentsPage } from './pages/documents/DocumentPages'
+import ChatPage from './pages/chat/ChatPage'
+import { WebConnectPage, WebContactsPage, WebContentPage, WebMenuPage, WebProductsPage, WebsiteOverviewPage } from './pages/website/WebsitePages'
 
 /**
  * Bảng định tuyến của ứng dụng.
@@ -121,7 +125,26 @@ export default function App() {
           <Route path="settings/apps" element={<AppsSettingsPage />} />
           <Route path="settings/numbering" element={<NumberingPage />} />
 
-          {/* Ứng dụng chưa làm: /website, /projects, /documents, /chat */}
+          {/* Dự án & công việc */}
+          <Route path="projects" element={<TasksPage />} />
+          <Route path="projects/list" element={<ProjectsPage />} />
+          <Route path="projects/:id" element={<ProjectDetailPage />} />
+
+          {/* Tài liệu */}
+          <Route path="documents" element={<DocumentsPage />} />
+
+          {/* Chat nội bộ */}
+          <Route path="chat" element={<ChatPage />} />
+
+          {/* Website */}
+          <Route path="website" element={<WebsiteOverviewPage />} />
+          <Route path="website/products" element={<WebProductsPage />} />
+          <Route path="website/content" element={<WebContentPage />} />
+          <Route path="website/contacts" element={<WebContactsPage />} />
+          <Route path="website/menu" element={<WebMenuPage />} />
+          <Route path="website/connect" element={<WebConnectPage />} />
+
+          {/* Ứng dụng mới khai báo trong core.Apps nhưng chưa có trang */}
           <Route path=":slug" element={<ComingSoonPage />} />
         </Route>
       </Route>

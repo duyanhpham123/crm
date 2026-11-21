@@ -1,3 +1,4 @@
+using MyERP.Api.Common;
 using Microsoft.EntityFrameworkCore;
 using MyERP.Api.Data;
 using MyERP.Api.Models.DTOs;
@@ -8,7 +9,7 @@ namespace MyERP.Api.Services.Reports;
 
 public interface IReportService
 {
-    Task<Dashboard> GetDashboardAsync(int days, CancellationToken ct);
+    Task<Result<Dashboard>> GetDashboardAsync(int? days, DateOnly? from, DateOnly? to, CancellationToken ct);
 }
 
 /// <summary>
@@ -19,15 +20,36 @@ public sealed class ReportService(AppDbContext db, TimeProvider clock) : IReport
 {
     private sealed record OrderRow(long Id, DateTime OrderDate, string Channel, string Status, decimal Revenue, decimal Cogs);
 
-    public async Task<Dashboard> GetDashboardAsync(int days, CancellationToken ct)
+    /// <summary>Khoảng dài nhất xem được trong một lần (2 năm).</summary>
+    public const int MaxRangeDays = 732;
+
+    /// <summary>
+    /// Kỳ báo cáo: from - to (theo ngày Việt Nam, tính cả 2 đầu) hoặc N ngày gần nhất. So sánh với kỳ liền trước cùng số ngày.
+    /// Biểu đồ gom theo ngày (tối đa 62 ngày), theo tuần (tối đa 186 ngày), dài hơn thì theo tháng.
+    /// </summary>
+    public async Task<Result<Dashboard>> GetDashboardAsync(int? days, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct)
     {
-        days = Math.Clamp(days, 7, 365);
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.AddHours(7));
-        var from = today.AddDays(-days + 1);
-        var prevFrom = from.AddDays(-days);
+        DateOnly from, to;
+        if (fromDate is not null || toDate is not null)
+        {
+            from = fromDate ?? toDate!.Value;
+            to = toDate ?? today;
+            if (to < from) return Error.Validation("report.range", "Ngày bắt đầu phải trước ngày kết thúc.");
+            if (to.DayNumber - from.DayNumber + 1 > MaxRangeDays) return Error.Validation("report.range", "Chỉ xem tối đa 2 năm mỗi lần.");
+        }
+        else
+        {
+            var n = Math.Clamp(days ?? 30, 1, MaxRangeDays);
+            to = today;
+            from = today.AddDays(-n + 1);
+        }
+        var length = to.DayNumber - from.DayNumber + 1;
+        var prevTo = from.AddDays(-1);
+        var prevFrom = from.AddDays(-length);
         var fromUtc = OrderService.LocalDayStartUtc(from);
         var prevFromUtc = OrderService.LocalDayStartUtc(prevFrom);
-        var toUtc = OrderService.LocalDayStartUtc(today.AddDays(1));
+        var toUtc = OrderService.LocalDayStartUtc(to.AddDays(1));
 
         var sold = new[] { OrderStatuses.Confirmed, OrderStatuses.Completed };
         var orders = await db.SalesOrders.Where(o => o.OrderDate >= prevFromUtc && o.OrderDate < toUtc)
@@ -44,10 +66,20 @@ public sealed class ReportService(AppDbContext db, TimeProvider clock) : IReport
         static decimal Gp(IEnumerable<OrderRow> r) => r.Sum(o => o.Revenue - o.Cogs);
         static decimal Aov(List<OrderRow> r) => r.Count == 0 ? 0 : Math.Round(Rev(r) / r.Count, 0);
 
-        var byDay = Enumerable.Range(0, days).Select(i => from.AddDays(i)).Select(d =>
+        var granularity = length <= 62 ? "day" : length <= 186 ? "week" : "month";
+        DateOnly Bucket(DateOnly d) => granularity switch
         {
-            var dayOrders = currentSold.Where(o => DateOnly.FromDateTime(o.OrderDate.AddHours(7)) == d).ToList();
-            return new DailyRevenue(d, Rev(dayOrders), Gp(dayOrders), dayOrders.Count);
+            "day" => d,
+            "week" => Max(from, d.AddDays(-(((int)d.DayOfWeek + 6) % 7))),   // tuần bắt đầu thứ Hai
+            _ => Max(from, new DateOnly(d.Year, d.Month, 1)),
+        };
+        static DateOnly Max(DateOnly a, DateOnly b) => a > b ? a : b;
+        var buckets = Enumerable.Range(0, length).Select(i => Bucket(from.AddDays(i))).Distinct().ToList();
+        var soldByBucket = currentSold.GroupBy(o => Bucket(DateOnly.FromDateTime(o.OrderDate.AddHours(7)))).ToDictionary(g => g.Key, g => g.ToList());
+        var byDay = buckets.Select(b =>
+        {
+            var list = soldByBucket.GetValueOrDefault(b) ?? [];
+            return new DailyRevenue(b, Rev(list), Gp(list), list.Count);
         }).ToList();
 
         var channelNames = OrderService.Channels.ToDictionary(c => c.Code, c => c.Name);
@@ -97,7 +129,7 @@ public sealed class ReportService(AppDbContext db, TimeProvider clock) : IReport
         var stockValue = await db.StockBalances.SumAsync(b => (decimal?)(b.QtyOnHand * b.AvgCost), ct) ?? 0;
         var receivable = await db.SalesOrders.Where(o => sold.Contains(o.Status)).SumAsync(o => (decimal?)(o.TotalAmount - o.AmountPaid), ct) ?? 0;
 
-        return new Dashboard(days,
+        return new Dashboard(length, from, to, prevFrom, prevTo, granularity,
             new KpiValue(Rev(currentSold), Rev(prevSold)),
             new KpiValue(Math.Round(Gp(currentSold), 0), Math.Round(Gp(prevSold), 0)),
             new KpiValue(currentSold.Count, prevSold.Count),

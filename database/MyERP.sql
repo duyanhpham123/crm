@@ -1,6 +1,6 @@
 ﻿/* =====================================================================
    Database MyERP – MyERP (cấu trúc + toàn bộ dữ liệu)
-   Tạo lúc: 2026-11-21 09:18
+   Tạo lúc: 2026-11-21 13:51
 
    CÁCH DÙNG TRÊN MÁY MỚI:
      1. Mở file này trong SQL Server Management Studio (SSMS), kết nối tới SQL Server.
@@ -3258,11 +3258,36 @@ CREATE TABLE web.Sites (
     WarehouseId     BIGINT        NULL,          -- kho trừ tồn cho đơn online
     Settings        NVARCHAR(MAX) NULL,          -- JSON: màu, script GA, pixel...
     IsActive        BIT           NOT NULL DEFAULT 1,
+    -- Website tự code (Next.js...) gọi API bằng khóa riêng; ERP lưu SHA-256 của khóa, khóa gốc chỉ hiện 1 lần
+    ApiKeyHash       CHAR(64)      NULL,
+    ApiKeyPrefix     VARCHAR(16)   NULL,
+    ApiKeyCreatedAt  DATETIME2(3)  NULL,
+    RevalidateUrl    VARCHAR(500)  NULL,     -- webhook báo website làm mới trang khi dữ liệu đổi
+    RevalidateSecret VARCHAR(100)  NULL,
+    LastSyncAt       DATETIME2(3)  NULL,
+    LastSyncStatus   NVARCHAR(300) NULL,
+    BotUserId        BIGINT        NULL,     -- tài khoản (không đăng nhập được) ghi người tạo cho đơn online
     CONSTRAINT PK_Sites PRIMARY KEY (Id),
     CONSTRAINT FK_Sites_Companies FOREIGN KEY (CompanyId) REFERENCES core.Companies(Id),
     CONSTRAINT FK_Sites_PriceLists FOREIGN KEY (PriceListId) REFERENCES md.PriceLists(Id),
     CONSTRAINT FK_Sites_Warehouses FOREIGN KEY (WarehouseId) REFERENCES inv.Warehouses(Id),
-    CONSTRAINT UQ_Sites_Domain UNIQUE (Domain)
+    CONSTRAINT UQ_Sites_Domain UNIQUE (Domain),
+    CONSTRAINT FK_Sites_BotUser FOREIGN KEY (BotUserId) REFERENCES core.Users(Id)
+);
+CREATE UNIQUE INDEX UX_Sites_ApiKeyHash ON web.Sites(ApiKeyHash) WHERE ApiKeyHash IS NOT NULL;
+
+/* Mẫu sản phẩm bày bán trên từng website (mỗi web chọn mẫu riêng, giá riêng nếu cần) */
+CREATE TABLE web.SiteProducts (
+    SiteId        BIGINT        NOT NULL,
+    ModelId       BIGINT        NOT NULL,
+    PriceOverride DECIMAL(18,2) NULL,        -- NULL = giá bán của từng biến thể
+    IsFeatured    BIT           NOT NULL DEFAULT 0,
+    SortOrder     INT           NOT NULL DEFAULT 0,
+    AddedAt       DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_SiteProducts PRIMARY KEY (SiteId, ModelId),
+    CONSTRAINT FK_SiteProducts_Sites FOREIGN KEY (SiteId) REFERENCES web.Sites(Id) ON DELETE CASCADE,
+    CONSTRAINT FK_SiteProducts_Models FOREIGN KEY (ModelId) REFERENCES md.ProductModels(Id),
+    CONSTRAINT CK_SiteProducts_Price CHECK (PriceOverride IS NULL OR PriceOverride >= 0)
 );
 
 CREATE TABLE web.Pages (
@@ -4040,6 +4065,71 @@ INSERT INTO [acc].[Payments] ([Id], [CompanyId], [BranchId], [DocNo], [PaymentTy
 SET IDENTITY_INSERT [acc].[Payments] OFF;
 GO
 
+-- chat.ChannelMembers (14 dòng)
+INSERT INTO [chat].[ChannelMembers] ([ChannelId], [UserId], [MemberRole], [LastReadMessageId], [IsMuted], [JoinedAt]) VALUES
+(1, 1, 'member', 17, 0, '2026-10-22T03:09:29.2720000'),
+(1, 2, 'member', 16, 0, '2026-10-22T03:09:29.2720000'),
+(1, 4, 'member', 17, 0, '2026-11-21T06:13:50.7940000'),
+(1, 7, 'member', 16, 0, '2026-10-22T03:09:29.2720000'),
+(2, 1, 'member', 14, 0, '2026-10-22T03:09:29.2720000'),
+(2, 2, 'owner', 14, 0, '2026-10-22T03:09:29.2720000'),
+(2, 3, 'member', 14, 0, '2026-10-22T03:09:29.2720000'),
+(2, 4, 'member', 14, 0, '2026-10-22T03:09:29.2720000'),
+(2, 6, 'member', 14, 0, '2026-10-22T03:09:29.2720000'),
+(3, 1, 'member', 10, 0, '2026-10-22T03:09:29.2720000'),
+(3, 5, 'member', 10, 0, '2026-10-22T03:09:29.2720000'),
+(3, 7, 'owner', 10, 0, '2026-10-22T03:09:29.2720000'),
+(4, 1, 'member', 15, 0, '2026-10-22T03:09:29.2720000'),
+(4, 2, 'member', 15, 0, '2026-10-22T03:09:29.2720000')
+;
+GO
+
+-- chat.Channels (4 dòng)
+SET IDENTITY_INSERT [chat].[Channels] ON;
+INSERT INTO [chat].[Channels] ([Id], [CompanyId], [Name], [ChannelType], [DepartmentId], [EntityName], [EntityId], [IsPrivate], [LastMessageAt], [CreatedAt], [CreatedBy], [IsArchived]) VALUES
+(1, 1, N'Toàn công ty', 'company', NULL, NULL, NULL, 0, '2026-11-21T06:09:00.3660000', '2026-10-22T03:09:29.2720000', NULL, 0),
+(2, 1, N'Cửa hàng Lê Lợi', 'group', NULL, NULL, NULL, 1, '2026-11-21T01:09:29.2720000', '2026-10-22T03:09:29.2720000', 2, 0),
+(3, 1, N'Marketing & Online', 'group', NULL, NULL, NULL, 1, '2026-11-20T05:59:29.2720000', '2026-10-22T03:09:29.2720000', 7, 0),
+(4, 1, NULL, 'direct', NULL, NULL, NULL, 1, '2026-11-21T02:24:29.2720000', '2026-11-16T03:09:29.2720000', 2, 0)
+;
+SET IDENTITY_INSERT [chat].[Channels] OFF;
+GO
+
+-- chat.MessageReactions (6 dòng)
+INSERT INTO [chat].[MessageReactions] ([MessageId], [UserId], [Reaction], [CreatedAt]) VALUES
+(1, 2, N'👍', '2026-11-19T02:54:29.2720000'),
+(1, 7, N'👍', '2026-11-19T02:54:29.2720000'),
+(3, 2, N'✅', '2026-11-19T03:34:29.2720000'),
+(13, 1, N'🎉', '2026-11-20T22:14:29.2720000'),
+(13, 3, N'👍', '2026-11-20T22:14:29.2720000'),
+(13, 7, N'❤️', '2026-11-20T22:14:29.2720000')
+;
+GO
+
+-- chat.Messages (17 dòng)
+SET IDENTITY_INSERT [chat].[Messages] ON;
+INSERT INTO [chat].[Messages] ([Id], [ChannelId], [SenderUserId], [Body], [ParentMessageId], [AttachmentId], [IsEdited], [EditedAt], [IsDeleted], [CreatedAt]) VALUES
+(1, 1, 1, N'Chào cả nhà! Từ tuần này mình dùng chat nội bộ trên MyERP thay cho nhóm Zalo nhé, có gì trao đổi việc ở đây cho dễ tìm lại.', NULL, NULL, 0, NULL, 0, '2026-11-19T02:49:29.2720000'),
+(2, 1, 2, N'Ok anh, em đã nhắc các bạn ở cửa hàng rồi ạ.', NULL, NULL, 0, NULL, 0, '2026-11-19T03:09:29.2720000'),
+(3, 1, 7, N'Marketing đã tạo mã giảm giá BLACKFRIDAY, áp dụng từ thứ 6 tuần này. Mọi người tư vấn khách giúp em nhé 🙌', NULL, NULL, 0, NULL, 0, '2026-11-19T03:29:29.2720000'),
+(4, 2, 2, N'Sáng mai 8h họp nhanh ca sáng 10 phút nha các em.', NULL, NULL, 0, NULL, 0, '2026-11-20T02:09:29.2720000'),
+(5, 2, 3, N'Dạ chị.', NULL, NULL, 0, NULL, 0, '2026-11-20T02:19:29.2720000'),
+(6, 2, 6, N'Hàng áo khoác bomber về chiều nay, ca chiều ai rảnh phụ anh kiểm hàng với.', NULL, NULL, 0, NULL, 0, '2026-11-20T02:59:29.2720000'),
+(7, 2, 4, N'Em phụ anh Tùng được ạ.', NULL, NULL, 0, NULL, 0, '2026-11-20T03:09:29.2720000'),
+(8, 3, 7, N'Vy ơi, lookbook Tết em chọn outfit tới đâu rồi?', NULL, NULL, 0, NULL, 0, '2026-11-20T05:29:29.2720000'),
+(9, 3, 5, N'Em chọn xong đồ nam rồi chị, đồ nữ chiều nay em gửi danh sách ạ.', NULL, NULL, 0, NULL, 0, '2026-11-20T05:49:29.2720000'),
+(10, 3, 7, N'Ok em, nhớ chọn thêm giày sneaker trắng phối cùng nhé, đang bán chạy.', NULL, NULL, 0, NULL, 0, '2026-11-20T05:59:29.2720000'),
+(11, 4, 2, N'Anh ơi, bản thiết kế standee khai trương Q7 Mai gửi rồi, anh xem giúp em trong hôm nay được không ạ?', NULL, NULL, 0, NULL, 0, '2026-11-20T17:09:29.2720000'),
+(12, 4, 1, N'Ok em, chiều anh xem rồi duyệt trên app Dự án luôn.', NULL, NULL, 0, NULL, 0, '2026-11-20T17:19:29.2720000'),
+(13, 1, 2, N'Doanh thu hôm qua cửa hàng Lê Lợi vượt chỉ tiêu 15% 🎉 Cảm ơn cả team!', NULL, NULL, 0, NULL, 0, '2026-11-20T22:09:29.2720000'),
+(14, 2, 3, N'Chị ơi khách hỏi áo polo pique size XL màu navy còn không ạ? Em check kho thấy còn 2 cái.', NULL, NULL, 0, NULL, 0, '2026-11-21T01:09:29.2720000'),
+(15, 4, 2, N'À anh ơi, hợp đồng thuê mặt bằng Lê Lợi còn khoảng 3 tuần là hết hạn, mình gia hạn luôn nha anh?', NULL, NULL, 0, NULL, 0, '2026-11-21T02:24:29.2720000'),
+(16, 1, 7, N'Nhắc mọi người: tối nay 20h livestream TikTok, ai rảnh vào thả tim giúp em với ạ ❤️', NULL, NULL, 0, NULL, 0, '2026-11-21T02:39:29.2720000'),
+(17, 1, 1, N'hello mọi người', NULL, NULL, 0, NULL, 0, '2026-11-21T06:09:00.3660000')
+;
+SET IDENTITY_INSERT [chat].[Messages] OFF;
+GO
+
 -- core.ApprovalRules (3 dòng)
 SET IDENTITY_INSERT [core].[ApprovalRules] ON;
 INSERT INTO [core].[ApprovalRules] ([Id], [CompanyId], [EntityName], [ApprovalLevel], [MinAmount], [ApproverRoleId], [ApproverUserId], [IsDepartmentManager], [IsActive]) VALUES
@@ -4246,7 +4336,7 @@ INSERT INTO [core].[Permissions] ([Id], [AppId], [Code], [Name], [Description]) 
 SET IDENTITY_INSERT [core].[Permissions] OFF;
 GO
 
--- core.RolePermissions (249 dòng)
+-- core.RolePermissions (327 dòng)
 INSERT INTO [core].[RolePermissions] ([RoleId], [PermissionId], [DataScope]) VALUES
 (1, 1, 'all'),
 (1, 2, 'all'),
@@ -4392,12 +4482,18 @@ INSERT INTO [core].[RolePermissions] ([RoleId], [PermissionId], [DataScope]) VAL
 (2, 65, 'company'),
 (2, 66, 'company'),
 (2, 67, 'company'),
+(2, 68, 'own'),
+(2, 69, 'own'),
 (2, 71, 'company'),
 (2, 72, 'company'),
 (2, 73, 'company'),
+(2, 74, 'own'),
+(2, 75, 'own'),
 (2, 77, 'company'),
 (2, 78, 'company'),
 (2, 79, 'company'),
+(2, 80, 'own'),
+(2, 81, 'own'),
 (2, 83, 'company'),
 (2, 84, 'company'),
 (2, 85, 'company'),
@@ -4419,6 +4515,15 @@ INSERT INTO [core].[RolePermissions] ([RoleId], [PermissionId], [DataScope]) VAL
 (3, 13, 'own'),
 (3, 14, 'own'),
 (3, 15, 'own'),
+(3, 67, 'own'),
+(3, 68, 'own'),
+(3, 69, 'own'),
+(3, 73, 'own'),
+(3, 74, 'own'),
+(3, 75, 'own'),
+(3, 79, 'own'),
+(3, 80, 'own'),
+(3, 81, 'own'),
 (4, 1, 'department'),
 (4, 2, 'department'),
 (4, 3, 'department'),
@@ -4437,6 +4542,15 @@ INSERT INTO [core].[RolePermissions] ([RoleId], [PermissionId], [DataScope]) VAL
 (4, 16, 'department'),
 (4, 17, 'department'),
 (4, 18, 'department'),
+(4, 67, 'own'),
+(4, 68, 'own'),
+(4, 69, 'own'),
+(4, 73, 'own'),
+(4, 74, 'own'),
+(4, 75, 'own'),
+(4, 79, 'own'),
+(4, 80, 'own'),
+(4, 81, 'own'),
 (4, 85, 'department'),
 (4, 90, 'department'),
 (5, 13, 'company'),
@@ -4448,6 +4562,15 @@ INSERT INTO [core].[RolePermissions] ([RoleId], [PermissionId], [DataScope]) VAL
 (5, 40, 'company'),
 (5, 41, 'company'),
 (5, 42, 'company'),
+(5, 67, 'own'),
+(5, 68, 'own'),
+(5, 69, 'own'),
+(5, 73, 'own'),
+(5, 74, 'own'),
+(5, 75, 'own'),
+(5, 79, 'own'),
+(5, 80, 'own'),
+(5, 81, 'own'),
 (5, 85, 'company'),
 (5, 90, 'company'),
 (6, 13, 'company'),
@@ -4461,17 +4584,44 @@ INSERT INTO [core].[RolePermissions] ([RoleId], [PermissionId], [DataScope]) VAL
 (6, 27, 'company'),
 (6, 30, 'company'),
 (6, 31, 'company'),
+(6, 67, 'own'),
+(6, 68, 'own'),
+(6, 69, 'own'),
+(6, 73, 'own'),
+(6, 74, 'own'),
+(6, 75, 'own'),
+(6, 79, 'own'),
+(6, 80, 'own'),
+(6, 81, 'own'),
 (7, 19, 'company'),
 (7, 31, 'company'),
 (7, 32, 'company'),
 (7, 33, 'company'),
 (7, 36, 'company'),
+(7, 67, 'own'),
+(7, 68, 'own'),
+(7, 69, 'own'),
+(7, 73, 'own'),
+(7, 74, 'own'),
+(7, 75, 'own'),
+(7, 79, 'own'),
+(7, 80, 'own'),
+(7, 81, 'own'),
 (8, 43, 'company'),
 (8, 44, 'company'),
 (8, 45, 'company'),
 (8, 46, 'company'),
 (8, 47, 'company'),
 (8, 48, 'company'),
+(8, 67, 'own'),
+(8, 68, 'own'),
+(8, 69, 'own'),
+(8, 73, 'own'),
+(8, 74, 'own'),
+(8, 75, 'own'),
+(8, 79, 'own'),
+(8, 80, 'own'),
+(8, 81, 'own'),
 (9, 1, 'company'),
 (9, 49, 'company'),
 (9, 50, 'company'),
@@ -4482,12 +4632,30 @@ INSERT INTO [core].[RolePermissions] ([RoleId], [PermissionId], [DataScope]) VAL
 (9, 56, 'company'),
 (9, 57, 'company'),
 (9, 58, 'company'),
+(9, 67, 'own'),
+(9, 68, 'own'),
+(9, 69, 'own'),
+(9, 73, 'own'),
+(9, 74, 'own'),
+(9, 75, 'own'),
+(9, 79, 'own'),
+(9, 80, 'own'),
+(9, 81, 'own'),
 (10, 1, 'company'),
 (10, 13, 'company'),
 (10, 61, 'department'),
 (10, 62, 'department'),
 (10, 63, 'department'),
 (10, 66, 'department'),
+(10, 67, 'own'),
+(10, 68, 'own'),
+(10, 69, 'own'),
+(10, 73, 'own'),
+(10, 74, 'own'),
+(10, 75, 'own'),
+(10, 79, 'own'),
+(10, 80, 'own'),
+(10, 81, 'own'),
 (11, 67, 'own'),
 (11, 68, 'own'),
 (11, 69, 'own'),
@@ -4518,7 +4686,7 @@ INSERT INTO [core].[Roles] ([Id], [CompanyId], [Code], [Name], [NormalizedName],
 SET IDENTITY_INSERT [core].[Roles] OFF;
 GO
 
--- core.SequenceCounters (40 dòng)
+-- core.SequenceCounters (42 dòng)
 INSERT INTO [core].[SequenceCounters] ([SequenceId], [Period], [NextNumber]) VALUES
 (1, 'ALL', 21),
 (3, 'ALL', 7),
@@ -4558,6 +4726,8 @@ INSERT INTO [core].[SequenceCounters] ([SequenceId], [Period], [NextNumber]) VAL
 (23, '202611', 21),
 (25, '202610', 2),
 (25, '202611', 10),
+(27, '2026', 5),
+(28, 'ALL', 27),
 (29, '2026', 5),
 (31, 'ALL', 5)
 ;
@@ -4616,22 +4786,47 @@ INSERT INTO [core].[Settings] ([Id], [CompanyId], [SettingKey], [SettingValue], 
 SET IDENTITY_INSERT [core].[Settings] OFF;
 GO
 
--- core.UserCompanies (1 dòng)
+-- core.UserCompanies (7 dòng)
 INSERT INTO [core].[UserCompanies] ([UserId], [CompanyId], [BranchId], [DepartmentId], [IsDefault]) VALUES
-(1, 1, 1, 9, 1)
+(1, 1, 1, 9, 1),
+(2, 1, 1, 10, 1),
+(3, 1, 1, 10, 1),
+(4, 1, 1, 10, 1),
+(5, 1, 1, 2, 1),
+(6, 1, 1, 5, 1),
+(7, 1, 1, 3, 1)
 ;
 GO
 
--- core.UserRoles (1 dòng)
+-- core.UserRoles (13 dòng)
 INSERT INTO [core].[UserRoles] ([UserId], [RoleId], [CompanyId]) VALUES
-(1, 1, 1)
+(1, 1, 1),
+(2, 2, 1),
+(2, 11, 1),
+(3, 3, 1),
+(3, 11, 1),
+(4, 3, 1),
+(4, 11, 1),
+(5, 3, 1),
+(5, 11, 1),
+(6, 6, 1),
+(6, 11, 1),
+(7, 9, 1),
+(7, 11, 1)
 ;
 GO
 
--- core.Users (1 dòng)
+-- core.Users (8 dòng)
 SET IDENTITY_INSERT [core].[Users] ON;
 INSERT INTO [core].[Users] ([Id], [UserName], [NormalizedUserName], [Email], [NormalizedEmail], [EmailConfirmed], [PasswordHash], [SecurityStamp], [ConcurrencyStamp], [PhoneNumber], [PhoneNumberConfirmed], [TwoFactorEnabled], [LockoutEnd], [LockoutEnabled], [AccessFailedCount], [FullName], [AvatarUrl], [DefaultCompanyId], [Language], [IsSystemAdmin], [IsActive], [LastLoginAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
-(1, N'admin', N'ADMIN', N'duyanh@gmail.com', N'DUYANH@GMAIL.COM', 0, N'AQAAAAIAAYagAAAAEBtb6iiRfAd5mFl4lacExqtGYg7xXth9dOrz1HtRU4Deo6jC84+Fk/VC+Waw+HF8zw==', N'92d2432a18664b9098a9951fa4357228', N'1ED543E7-8663-4AE7-B115-CC0246C04E57', NULL, 0, 0, NULL, 1, 0, N'Quản trị hệ thống', NULL, 1, 'vi', 1, 1, '2026-11-20T14:50:25.0280000', '2026-11-19T02:33:24.3780000', NULL, '2026-11-20T14:50:25.3460000', NULL, 0)
+(1, N'admin', N'ADMIN', N'duyanh@gmail.com', N'DUYANH@GMAIL.COM', 0, N'AQAAAAIAAYagAAAAEBtb6iiRfAd5mFl4lacExqtGYg7xXth9dOrz1HtRU4Deo6jC84+Fk/VC+Waw+HF8zw==', N'92d2432a18664b9098a9951fa4357228', N'1ED543E7-8663-4AE7-B115-CC0246C04E57', NULL, 0, 0, NULL, 1, 0, N'Quản trị hệ thống', NULL, 1, 'vi', 1, 1, '2026-11-20T14:50:25.0280000', '2026-11-19T02:33:24.3780000', NULL, '2026-11-20T14:50:25.3460000', NULL, 0),
+(2, N'nhung', N'NHUNG', N'nhung@mystyle.vn', N'NHUNG@MYSTYLE.VN', 0, NULL, N'6ED99879-D2A5-404A-A984-EAD28A88C8F8', N'08AA61B9-6B84-406C-BBE3-F0AECCC5CC86', '0912340001', 0, 0, NULL, 1, 0, N'Trần Thị Hồng Nhung', NULL, 1, 'vi', 0, 1, NULL, '2026-11-21T03:09:29.2800000', NULL, NULL, NULL, 0),
+(3, N'chau', N'CHAU', N'chau@mystyle.vn', N'CHAU@MYSTYLE.VN', 0, NULL, N'E2CBBF10-4C0D-463B-BF07-8C10AC1892AD', N'0EE5566A-21DA-4272-91A2-9F30BD2FDE62', '0912340002', 0, 0, NULL, 1, 0, N'Lê Minh Châu', NULL, 1, 'vi', 0, 1, NULL, '2026-11-21T03:09:29.2800000', NULL, NULL, NULL, 0),
+(4, N'ducanh', N'DUCANH', N'ducanh@mystyle.vn', N'DUCANH@MYSTYLE.VN', 0, N'AQAAAAIAAYagAAAAEBtb6iiRfAd5mFl4lacExqtGYg7xXth9dOrz1HtRU4Deo6jC84+Fk/VC+Waw+HF8zw==', N'C2FA3BF3-26FD-40C7-B343-7A03B3951AE0', N'0D9A9305-09D1-4832-816B-71B3ECC86EBA', '0912340003', 0, 0, NULL, 1, 0, N'Phạm Đức Anh', NULL, 1, 'vi', 0, 1, '2026-11-21T06:13:25.7190000', '2026-11-21T03:09:29.2800000', NULL, '2026-11-21T06:13:26.0120000', NULL, 0),
+(5, N'thaovy', N'THAOVY', N'thaovy@mystyle.vn', N'THAOVY@MYSTYLE.VN', 0, NULL, N'BFC601EA-36DE-4FCF-ABFE-17ED06C414CC', N'BDDAC95F-5670-4892-88E1-33DCB7C6B344', '0912340004', 0, 0, NULL, 1, 0, N'Nguyễn Thảo Vy', NULL, 1, 'vi', 0, 1, NULL, '2026-11-21T03:09:29.2800000', NULL, NULL, NULL, 0),
+(6, N'tung', N'TUNG', N'tung@mystyle.vn', N'TUNG@MYSTYLE.VN', 0, NULL, N'E078879F-0467-48BB-937F-04A3BBEC7E79', N'ED49F226-868D-4B02-8EEE-9E84226341D3', '0912340005', 0, 0, NULL, 1, 0, N'Hoàng Văn Tùng', NULL, 1, 'vi', 0, 1, NULL, '2026-11-21T03:09:29.2800000', NULL, NULL, NULL, 0),
+(7, N'mai', N'MAI', N'mai@mystyle.vn', N'MAI@MYSTYLE.VN', 0, NULL, N'EA3B3A74-8F59-4E70-B988-C9665962BB45', N'C54E78BA-5D7D-4837-9A0E-E118764A37D4', '0912340006', 0, 0, NULL, 1, 0, N'Vũ Thanh Mai', NULL, 1, 'vi', 0, 1, NULL, '2026-11-21T03:09:29.2800000', NULL, NULL, NULL, 0),
+(10, N'website.bot.1', N'WEBSITE.BOT.1', NULL, NULL, 0, NULL, N'905D72FC-D639-4567-867A-173183DF8ED5', N'2B8A661E-07F6-4224-97ED-C6690575FAF4', NULL, 0, 0, NULL, 1, 0, N'Website (bán online)', NULL, 1, 'vi', 0, 0, NULL, '2026-11-21T06:31:24.0420000', NULL, NULL, NULL, 0)
 ;
 SET IDENTITY_INSERT [core].[Users] OFF;
 GO
@@ -4781,6 +4976,37 @@ INSERT INTO [cs].[Tickets] ([Id], [CompanyId], [Code], [Subject], [Description],
 (10, 1, 'TK2611-00009', N'Hoàn tiền đơn hủy trên Shopee', N'Khách hủy đơn trên Shopee nhưng chưa thấy tiền hoàn.', 23, NULL, NULL, NULL, NULL, NULL, NULL, 2, 'other', 'normal', 'resolved', 1, NULL, 3, '2026-11-15T19:17:41.0000000', '2026-11-16T15:17:41.0000000', '2026-11-15T15:42:41.0770000', '2026-11-15T21:17:41.0770000', NULL, N'Hướng dẫn khách kiểm tra ví ShopeePay', 3, NULL, '2026-11-15T15:17:41.0770000', 1, NULL, NULL, 0)
 ;
 SET IDENTITY_INSERT [cs].[Tickets] OFF;
+GO
+
+-- doc.Documents (12 dòng)
+SET IDENTITY_INSERT [doc].[Documents] ON;
+INSERT INTO [doc].[Documents] ([Id], [CompanyId], [FolderId], [Code], [Title], [DocumentType], [PartnerId], [EntityName], [EntityId], [CurrentVersionNo], [OwnerUserId], [Status], [EffectiveDate], [ExpiryDate], [ContractValue], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
+(1, 1, 1, 'HD-TMB-01', N'Hợp đồng thuê mặt bằng cửa hàng 123 Lê Lợi', 'contract', NULL, NULL, NULL, 0, 1, 'active', '2024-12-12', '2026-12-12', 960000000.00, '2024-12-11T03:09:29.2720000', 1, NULL, NULL, 0),
+(2, 1, 1, 'HD-TMB-02', N'Hợp đồng thuê mặt bằng chi nhánh Q7 (45 Nguyễn Thị Thập)', 'contract', NULL, NULL, NULL, 0, 2, 'signed', '2026-11-05', '2029-11-04', 1620000000.00, '2026-11-04T03:09:29.2720000', 1, NULL, NULL, 0),
+(3, 1, 1, 'HD-NCC-01', N'Hợp đồng nguyên tắc cung cấp hàng may mặc 2026', 'contract', 25, NULL, NULL, 0, 1, 'active', '2026-01-25', '2027-01-25', 500000000.00, '2026-01-24T03:09:29.2720000', 1, NULL, NULL, 0),
+(4, 1, 1, 'HD-NCC-03', N'Hợp đồng cung cấp vải và quần jeans', 'contract', 27, NULL, NULL, 0, 1, 'active', '2026-05-05', '2027-05-05', 300000000.00, '2026-05-04T03:09:29.2720000', 1, NULL, NULL, 0),
+(5, 1, 1, 'HD-NCC-04', N'Hợp đồng phân phối giày da 2025', 'contract', 28, NULL, NULL, 0, 1, 'active', '2025-10-17', '2026-10-17', 180000000.00, '2025-10-16T03:09:29.2720000', 1, NULL, NULL, 0),
+(6, 1, 1, 'HD-VC-01', N'Hợp đồng dịch vụ giao hàng GHN', 'contract', NULL, NULL, NULL, 0, 6, 'pending_signature', NULL, NULL, NULL, '2026-11-18T03:09:29.2720000', 1, NULL, NULL, 0),
+(7, 1, 2, NULL, N'Chính sách đổi trả hàng (áp dụng 2026)', 'policy', NULL, NULL, NULL, 0, 1, 'active', '2026-01-05', NULL, NULL, '2026-01-04T03:09:29.2720000', 1, NULL, NULL, 0),
+(8, 1, 2, NULL, N'Quy định chấm công, nghỉ phép', 'policy', NULL, NULL, NULL, 0, 1, 'active', '2026-01-05', NULL, NULL, '2026-01-04T03:09:29.2720000', 1, NULL, NULL, 0),
+(9, 1, 4, NULL, N'Quy trình nhập kho và kiểm hàng', 'process', NULL, NULL, NULL, 0, 6, 'active', '2026-06-24', NULL, NULL, '2026-06-23T03:09:29.2720000', 6, NULL, NULL, 0),
+(10, 1, 3, NULL, N'Mẫu phiếu bảo hành giày', 'form', NULL, NULL, NULL, 0, 1, 'active', NULL, NULL, NULL, '2026-07-24T03:09:29.2720000', 1, NULL, NULL, 0),
+(11, 1, 3, NULL, N'Mẫu biên bản bàn giao ca', 'form', NULL, NULL, NULL, 0, 2, 'draft', NULL, NULL, NULL, '2026-11-19T03:09:29.2720000', 2, NULL, NULL, 0),
+(12, 1, 5, NULL, N'Báo cáo hiệu quả quảng cáo tháng 10', 'report', NULL, NULL, NULL, 0, 7, 'active', NULL, NULL, NULL, '2026-11-01T03:09:29.2720000', 7, NULL, NULL, 0)
+;
+SET IDENTITY_INSERT [doc].[Documents] OFF;
+GO
+
+-- doc.Folders (5 dòng)
+SET IDENTITY_INSERT [doc].[Folders] ON;
+INSERT INTO [doc].[Folders] ([Id], [CompanyId], [ParentId], [Name], [OwnerUserId], [DepartmentId], [Path], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
+(1, 1, NULL, N'Hợp đồng', 1, NULL, NULL, '2026-08-23T03:09:29.2720000', 1, NULL, NULL, 0),
+(2, 1, NULL, N'Quy trình - Quy định', 1, NULL, NULL, '2026-08-23T03:09:29.2720000', 1, NULL, NULL, 0),
+(3, 1, NULL, N'Biểu mẫu', 1, NULL, NULL, '2026-08-23T03:09:29.2720000', 1, NULL, NULL, 0),
+(4, 1, NULL, N'Kho vận', 6, 5, NULL, '2026-09-22T03:09:29.2720000', 1, NULL, NULL, 0),
+(5, 1, NULL, N'Marketing', 7, 3, NULL, '2026-09-22T03:09:29.2720000', 1, NULL, NULL, 0)
+;
+SET IDENTITY_INSERT [doc].[Folders] OFF;
 GO
 
 -- hr.Attendances (186 dòng)
@@ -5005,12 +5231,12 @@ GO
 -- hr.Employees (6 dòng)
 SET IDENTITY_INSERT [hr].[Employees] ON;
 INSERT INTO [hr].[Employees] ([Id], [CompanyId], [Code], [UserId], [FullName], [Gender], [DateOfBirth], [IdNumber], [IdIssuedDate], [IdIssuedPlace], [Phone], [PersonalEmail], [WorkEmail], [PermanentAddress], [CurrentAddress], [BranchId], [DepartmentId], [PositionId], [ManagerId], [HireDate], [OfficialDate], [TerminationDate], [EmploymentStatus], [PersonalTaxCode], [SocialInsuranceNo], [Dependents], [BankName], [BankAccountNo], [AvatarUrl], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
-(1, 1, 'NV-00001', NULL, N'Trần Thị Hồng Nhung', 'F', '1992-04-12', NULL, NULL, NULL, '0912340001', NULL, NULL, NULL, NULL, NULL, 10, 1, NULL, '2025-03-01', NULL, NULL, 'official', NULL, NULL, 1, N'Vietcombank', '0021000111001', NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
-(2, 1, 'NV-00002', NULL, N'Lê Minh Châu', 'F', '1999-08-25', NULL, NULL, NULL, '0912340002', NULL, NULL, NULL, NULL, NULL, 10, 2, NULL, '2025-09-01', NULL, NULL, 'official', NULL, NULL, 0, N'Vietcombank', '0021000111002', NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
-(3, 1, 'NV-00003', NULL, N'Phạm Đức Anh', 'M', '2000-01-30', NULL, NULL, NULL, '0912340003', NULL, NULL, NULL, NULL, NULL, 10, 2, NULL, '2026-02-15', NULL, NULL, 'official', NULL, NULL, 0, N'Vietcombank', '0021000111003', NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
-(4, 1, 'NV-00004', NULL, N'Nguyễn Thảo Vy', 'F', '1998-11-05', NULL, NULL, NULL, '0912340004', NULL, NULL, NULL, NULL, NULL, 2, 3, NULL, '2025-12-01', NULL, NULL, 'official', NULL, NULL, 0, N'Vietcombank', '0021000111004', NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
-(5, 1, 'NV-00005', NULL, N'Hoàng Văn Tùng', 'M', '2002-06-18', NULL, NULL, NULL, '0912340005', NULL, NULL, NULL, NULL, NULL, 5, 4, NULL, '2026-11-10', NULL, NULL, 'probation', NULL, NULL, 0, NULL, NULL, NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
-(6, 1, 'NV-00006', NULL, N'Vũ Thanh Mai', 'F', '1997-03-09', NULL, NULL, NULL, '0912340006', NULL, NULL, NULL, NULL, NULL, 3, 6, NULL, '2025-11-01', NULL, '2026-09-30', 'resigned', NULL, NULL, 0, NULL, NULL, NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0)
+(1, 1, 'NV-00001', 2, N'Trần Thị Hồng Nhung', 'F', '1992-04-12', NULL, NULL, NULL, '0912340001', NULL, NULL, NULL, NULL, NULL, 10, 1, NULL, '2025-03-01', NULL, NULL, 'official', NULL, NULL, 1, N'Vietcombank', '0021000111001', NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
+(2, 1, 'NV-00002', 3, N'Lê Minh Châu', 'F', '1999-08-25', NULL, NULL, NULL, '0912340002', NULL, NULL, NULL, NULL, NULL, 10, 2, NULL, '2025-09-01', NULL, NULL, 'official', NULL, NULL, 0, N'Vietcombank', '0021000111002', NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
+(3, 1, 'NV-00003', 4, N'Phạm Đức Anh', 'M', '2000-01-30', NULL, NULL, NULL, '0912340003', NULL, NULL, NULL, NULL, NULL, 10, 2, NULL, '2026-02-15', NULL, NULL, 'official', NULL, NULL, 0, N'Vietcombank', '0021000111003', NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
+(4, 1, 'NV-00004', 5, N'Nguyễn Thảo Vy', 'F', '1998-11-05', NULL, NULL, NULL, '0912340004', NULL, NULL, NULL, NULL, NULL, 2, 3, NULL, '2025-12-01', NULL, NULL, 'official', NULL, NULL, 0, N'Vietcombank', '0021000111004', NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
+(5, 1, 'NV-00005', 6, N'Hoàng Văn Tùng', 'M', '2002-06-18', NULL, NULL, NULL, '0912340005', NULL, NULL, NULL, NULL, NULL, 5, 4, NULL, '2026-11-10', NULL, NULL, 'probation', NULL, NULL, 0, NULL, NULL, NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0),
+(6, 1, 'NV-00006', 7, N'Vũ Thanh Mai', 'F', '1997-03-09', NULL, NULL, NULL, '0912340006', NULL, NULL, NULL, NULL, NULL, 3, 6, NULL, '2025-11-01', NULL, '2026-09-30', 'resigned', NULL, NULL, 0, NULL, NULL, NULL, '2026-11-21T00:55:41.0730000', 1, NULL, NULL, 0)
 ;
 SET IDENTITY_INSERT [hr].[Employees] OFF;
 GO
@@ -7159,30 +7385,30 @@ GO
 -- md.Products (168 dòng)
 SET IDENTITY_INSERT [md].[Products] ON;
 INSERT INTO [md].[Products] ([Id], [CompanyId], [Code], [Barcode], [Name], [ProductType], [CategoryId], [BrandId], [UomId], [PurchaseUomId], [SalePrice], [CostPrice], [CostMethod], [SaleTaxId], [PurchaseTaxId], [IsSellable], [IsPurchasable], [IsStockTracked], [TrackingType], [MinStock], [MaxStock], [WarrantyMonths], [WeightGram], [LengthCm], [WidthCm], [HeightCm], [ImageUrl], [Description], [IsPublishedWeb], [WebSlug], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted], [ModelId], [Color], [Size]) VALUES
-(1, 1, 'ATO03-BE-M', NULL, N'Áo thun oversize in chữ - Be - M', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Be', 'M'),
-(2, 1, 'ATO03-BE-L', NULL, N'Áo thun oversize in chữ - Be - L', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Be', 'L'),
-(3, 1, 'ATO03-BE-XL', NULL, N'Áo thun oversize in chữ - Be - XL', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Be', 'XL'),
-(4, 1, 'ASN05-BE-S', NULL, N'Áo sơ mi nữ lụa - Be - S', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Be', 'S'),
-(5, 1, 'ASN05-BE-M', NULL, N'Áo sơ mi nữ lụa - Be - M', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Be', 'M'),
-(6, 1, 'ASN05-BE-L', NULL, N'Áo sơ mi nữ lụa - Be - L', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Be', 'L'),
+(1, 1, 'ATO03-BE-M', NULL, N'Áo thun oversize in chữ - Be - M', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-be-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Be', 'M'),
+(2, 1, 'ATO03-BE-L', NULL, N'Áo thun oversize in chữ - Be - L', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-be-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Be', 'L'),
+(3, 1, 'ATO03-BE-XL', NULL, N'Áo thun oversize in chữ - Be - XL', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-be-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Be', 'XL'),
+(4, 1, 'ASN05-BE-S', NULL, N'Áo sơ mi nữ lụa - Be - S', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-be-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Be', 'S'),
+(5, 1, 'ASN05-BE-M', NULL, N'Áo sơ mi nữ lụa - Be - M', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-be-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Be', 'M'),
+(6, 1, 'ASN05-BE-L', NULL, N'Áo sơ mi nữ lụa - Be - L', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-be-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Be', 'L'),
 (7, 1, 'QKK08-BE-29', NULL, N'Quần kaki chinos - Be - 29', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Be', '29'),
 (8, 1, 'QKK08-BE-30', NULL, N'Quần kaki chinos - Be - 30', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Be', '30'),
 (9, 1, 'QKK08-BE-31', NULL, N'Quần kaki chinos - Be - 31', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Be', '31'),
 (10, 1, 'QKK08-BE-32', NULL, N'Quần kaki chinos - Be - 32', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Be', '32'),
-(11, 1, 'VCS11-BE-S', NULL, N'Chân váy chữ A - Be - S', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Be', 'S'),
-(12, 1, 'VCS11-BE-M', NULL, N'Chân váy chữ A - Be - M', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Be', 'M'),
-(13, 1, 'VCS11-BE-L', NULL, N'Chân váy chữ A - Be - L', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Be', 'L'),
-(14, 1, 'DSD17-BE-37', NULL, N'Dép sandal quai ngang - Be - 37', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '37'),
-(15, 1, 'DSD17-BE-38', NULL, N'Dép sandal quai ngang - Be - 38', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '38'),
-(16, 1, 'DSD17-BE-39', NULL, N'Dép sandal quai ngang - Be - 39', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '39'),
-(17, 1, 'DSD17-BE-40', NULL, N'Dép sandal quai ngang - Be - 40', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '40'),
-(18, 1, 'DSD17-BE-41', NULL, N'Dép sandal quai ngang - Be - 41', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '41'),
-(19, 1, 'DSD17-BE-42', NULL, N'Dép sandal quai ngang - Be - 42', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '42'),
-(20, 1, 'GCG15-BE-35', NULL, N'Giày cao gót mũi nhọn - Be - 35', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '35'),
-(21, 1, 'GCG15-BE-36', NULL, N'Giày cao gót mũi nhọn - Be - 36', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '36'),
-(22, 1, 'GCG15-BE-37', NULL, N'Giày cao gót mũi nhọn - Be - 37', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '37'),
-(23, 1, 'GCG15-BE-38', NULL, N'Giày cao gót mũi nhọn - Be - 38', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '38'),
-(24, 1, 'GCG15-BE-39', NULL, N'Giày cao gót mũi nhọn - Be - 39', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '39'),
+(11, 1, 'VCS11-BE-S', NULL, N'Chân váy chữ A - Be - S', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vcs11-be-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Be', 'S'),
+(12, 1, 'VCS11-BE-M', NULL, N'Chân váy chữ A - Be - M', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vcs11-be-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Be', 'M'),
+(13, 1, 'VCS11-BE-L', NULL, N'Chân váy chữ A - Be - L', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vcs11-be-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Be', 'L'),
+(14, 1, 'DSD17-BE-37', NULL, N'Dép sandal quai ngang - Be - 37', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-be-37', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '37'),
+(15, 1, 'DSD17-BE-38', NULL, N'Dép sandal quai ngang - Be - 38', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-be-38', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '38'),
+(16, 1, 'DSD17-BE-39', NULL, N'Dép sandal quai ngang - Be - 39', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-be-39', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '39'),
+(17, 1, 'DSD17-BE-40', NULL, N'Dép sandal quai ngang - Be - 40', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-be-40', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '40'),
+(18, 1, 'DSD17-BE-41', NULL, N'Dép sandal quai ngang - Be - 41', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-be-41', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '41'),
+(19, 1, 'DSD17-BE-42', NULL, N'Dép sandal quai ngang - Be - 42', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-be-42', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Be', '42'),
+(20, 1, 'GCG15-BE-35', NULL, N'Giày cao gót mũi nhọn - Be - 35', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-be-35', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '35'),
+(21, 1, 'GCG15-BE-36', NULL, N'Giày cao gót mũi nhọn - Be - 36', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-be-36', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '36'),
+(22, 1, 'GCG15-BE-37', NULL, N'Giày cao gót mũi nhọn - Be - 37', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-be-37', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '37'),
+(23, 1, 'GCG15-BE-38', NULL, N'Giày cao gót mũi nhọn - Be - 38', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-be-38', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '38'),
+(24, 1, 'GCG15-BE-39', NULL, N'Giày cao gót mũi nhọn - Be - 39', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-be-39', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Be', '39'),
 (25, 1, 'MLT19-BE-FREESIZE', NULL, N'Mũ lưỡi trai - Be - Free size', 'goods', 13, 2, 1, NULL, 129000.0000, 45000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 19, N'Be', 'Free size'),
 (26, 1, 'TAT20-DEN-FREESIZE', NULL, N'Tất cổ ngắn (combo 3 đôi) - Đen - Free size', 'goods', 13, 1, 12, NULL, 79000.0000, 28000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 20, N'Đen', 'Free size'),
 (27, 1, 'GTL16-DEN-39', NULL, N'Giày tây da bò - Đen - 39', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Đen', '39'),
@@ -7190,143 +7416,143 @@ INSERT INTO [md].[Products] ([Id], [CompanyId], [Code], [Barcode], [Name], [Prod
 (29, 1, 'GTL16-DEN-41', NULL, N'Giày tây da bò - Đen - 41', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Đen', '41'),
 (30, 1, 'GTL16-DEN-42', NULL, N'Giày tây da bò - Đen - 42', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Đen', '42'),
 (31, 1, 'GTL16-DEN-43', NULL, N'Giày tây da bò - Đen - 43', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Đen', '43'),
-(32, 1, 'DSD17-DEN-37', NULL, N'Dép sandal quai ngang - Đen - 37', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '37'),
-(33, 1, 'DSD17-DEN-38', NULL, N'Dép sandal quai ngang - Đen - 38', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '38'),
-(34, 1, 'DSD17-DEN-39', NULL, N'Dép sandal quai ngang - Đen - 39', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '39'),
-(35, 1, 'DSD17-DEN-40', NULL, N'Dép sandal quai ngang - Đen - 40', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '40'),
-(36, 1, 'DSD17-DEN-41', NULL, N'Dép sandal quai ngang - Đen - 41', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '41'),
-(37, 1, 'DSD17-DEN-42', NULL, N'Dép sandal quai ngang - Đen - 42', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '42'),
+(32, 1, 'DSD17-DEN-37', NULL, N'Dép sandal quai ngang - Đen - 37', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-den-37', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '37'),
+(33, 1, 'DSD17-DEN-38', NULL, N'Dép sandal quai ngang - Đen - 38', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-den-38', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '38'),
+(34, 1, 'DSD17-DEN-39', NULL, N'Dép sandal quai ngang - Đen - 39', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-den-39', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '39'),
+(35, 1, 'DSD17-DEN-40', NULL, N'Dép sandal quai ngang - Đen - 40', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-den-40', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '40'),
+(36, 1, 'DSD17-DEN-41', NULL, N'Dép sandal quai ngang - Đen - 41', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-den-41', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '41'),
+(37, 1, 'DSD17-DEN-42', NULL, N'Dép sandal quai ngang - Đen - 42', 'goods', 11, 5, 21, NULL, 249000.0000, 95000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'dsd17-den-42', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 17, N'Đen', '42'),
 (38, 1, 'MLT19-DEN-FREESIZE', NULL, N'Mũ lưỡi trai - Đen - Free size', 'goods', 13, 2, 1, NULL, 129000.0000, 45000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 19, N'Đen', 'Free size'),
-(39, 1, 'TXK18-DEN', NULL, N'Túi xách nữ đeo chéo - Đen', 'goods', 12, 3, 1, NULL, 459000.0000, 190000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 18, N'Đen', NULL),
-(40, 1, 'AKB12-DEN-M', NULL, N'Áo khoác bomber - Đen - M', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Đen', 'M'),
-(41, 1, 'AKB12-DEN-L', NULL, N'Áo khoác bomber - Đen - L', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Đen', 'L'),
-(42, 1, 'AKB12-DEN-XL', NULL, N'Áo khoác bomber - Đen - XL', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Đen', 'XL'),
-(43, 1, 'VCS11-DEN-S', NULL, N'Chân váy chữ A - Đen - S', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Đen', 'S'),
-(44, 1, 'VCS11-DEN-M', NULL, N'Chân váy chữ A - Đen - M', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Đen', 'M'),
-(45, 1, 'VCS11-DEN-L', NULL, N'Chân váy chữ A - Đen - L', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Đen', 'L'),
-(46, 1, 'GSN14-DEN-36', NULL, N'Giày sneaker trắng - Đen - 36', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '36'),
-(47, 1, 'GSN14-DEN-37', NULL, N'Giày sneaker trắng - Đen - 37', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '37'),
-(48, 1, 'GSN14-DEN-38', NULL, N'Giày sneaker trắng - Đen - 38', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '38'),
-(49, 1, 'GSN14-DEN-39', NULL, N'Giày sneaker trắng - Đen - 39', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '39'),
-(50, 1, 'GSN14-DEN-40', NULL, N'Giày sneaker trắng - Đen - 40', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '40'),
-(51, 1, 'GSN14-DEN-41', NULL, N'Giày sneaker trắng - Đen - 41', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '41'),
-(52, 1, 'GSN14-DEN-42', NULL, N'Giày sneaker trắng - Đen - 42', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '42'),
-(53, 1, 'GSN14-DEN-43', NULL, N'Giày sneaker trắng - Đen - 43', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '43'),
-(54, 1, 'GCG15-DEN-35', NULL, N'Giày cao gót mũi nhọn - Đen - 35', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '35'),
-(55, 1, 'GCG15-DEN-36', NULL, N'Giày cao gót mũi nhọn - Đen - 36', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '36'),
-(56, 1, 'GCG15-DEN-37', NULL, N'Giày cao gót mũi nhọn - Đen - 37', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '37'),
-(57, 1, 'GCG15-DEN-38', NULL, N'Giày cao gót mũi nhọn - Đen - 38', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '38'),
-(58, 1, 'GCG15-DEN-39', NULL, N'Giày cao gót mũi nhọn - Đen - 39', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '39'),
+(39, 1, 'TXK18-DEN', NULL, N'Túi xách nữ đeo chéo - Đen', 'goods', 12, 3, 1, NULL, 459000.0000, 190000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'txk18-den', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 18, N'Đen', NULL),
+(40, 1, 'AKB12-DEN-M', NULL, N'Áo khoác bomber - Đen - M', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akb12-den-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Đen', 'M'),
+(41, 1, 'AKB12-DEN-L', NULL, N'Áo khoác bomber - Đen - L', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akb12-den-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Đen', 'L'),
+(42, 1, 'AKB12-DEN-XL', NULL, N'Áo khoác bomber - Đen - XL', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akb12-den-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Đen', 'XL'),
+(43, 1, 'VCS11-DEN-S', NULL, N'Chân váy chữ A - Đen - S', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vcs11-den-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Đen', 'S'),
+(44, 1, 'VCS11-DEN-M', NULL, N'Chân váy chữ A - Đen - M', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vcs11-den-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Đen', 'M'),
+(45, 1, 'VCS11-DEN-L', NULL, N'Chân váy chữ A - Đen - L', 'goods', 6, 3, 1, NULL, 279000.0000, 110000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vcs11-den-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 11, N'Đen', 'L'),
+(46, 1, 'GSN14-DEN-36', NULL, N'Giày sneaker trắng - Đen - 36', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-den-36', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '36'),
+(47, 1, 'GSN14-DEN-37', NULL, N'Giày sneaker trắng - Đen - 37', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-den-37', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '37'),
+(48, 1, 'GSN14-DEN-38', NULL, N'Giày sneaker trắng - Đen - 38', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-den-38', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '38'),
+(49, 1, 'GSN14-DEN-39', NULL, N'Giày sneaker trắng - Đen - 39', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-den-39', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '39'),
+(50, 1, 'GSN14-DEN-40', NULL, N'Giày sneaker trắng - Đen - 40', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-den-40', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '40'),
+(51, 1, 'GSN14-DEN-41', NULL, N'Giày sneaker trắng - Đen - 41', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-den-41', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '41'),
+(52, 1, 'GSN14-DEN-42', NULL, N'Giày sneaker trắng - Đen - 42', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-den-42', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '42'),
+(53, 1, 'GSN14-DEN-43', NULL, N'Giày sneaker trắng - Đen - 43', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-den-43', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Đen', '43'),
+(54, 1, 'GCG15-DEN-35', NULL, N'Giày cao gót mũi nhọn - Đen - 35', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-den-35', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '35'),
+(55, 1, 'GCG15-DEN-36', NULL, N'Giày cao gót mũi nhọn - Đen - 36', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-den-36', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '36'),
+(56, 1, 'GCG15-DEN-37', NULL, N'Giày cao gót mũi nhọn - Đen - 37', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-den-37', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '37'),
+(57, 1, 'GCG15-DEN-38', NULL, N'Giày cao gót mũi nhọn - Đen - 38', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-den-38', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '38'),
+(58, 1, 'GCG15-DEN-39', NULL, N'Giày cao gót mũi nhọn - Đen - 39', 'goods', 9, 5, 21, NULL, 520000.0000, 220000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gcg15-den-39', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 15, N'Đen', '39'),
 (59, 1, 'QKK08-DEN-29', NULL, N'Quần kaki chinos - Đen - 29', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Đen', '29'),
 (60, 1, 'QKK08-DEN-30', NULL, N'Quần kaki chinos - Đen - 30', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Đen', '30'),
 (61, 1, 'QKK08-DEN-31', NULL, N'Quần kaki chinos - Đen - 31', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Đen', '31'),
 (62, 1, 'QKK08-DEN-32', NULL, N'Quần kaki chinos - Đen - 32', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Đen', '32'),
-(63, 1, 'QJN07-DEN-S', NULL, N'Quần jeans nữ ống rộng - Đen - S', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Đen', 'S'),
-(64, 1, 'QJN07-DEN-M', NULL, N'Quần jeans nữ ống rộng - Đen - M', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Đen', 'M'),
-(65, 1, 'QJN07-DEN-L', NULL, N'Quần jeans nữ ống rộng - Đen - L', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Đen', 'L'),
+(63, 1, 'QJN07-DEN-S', NULL, N'Quần jeans nữ ống rộng - Đen - S', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjn07-den-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Đen', 'S'),
+(64, 1, 'QJN07-DEN-M', NULL, N'Quần jeans nữ ống rộng - Đen - M', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjn07-den-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Đen', 'M'),
+(65, 1, 'QJN07-DEN-L', NULL, N'Quần jeans nữ ống rộng - Đen - L', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjn07-den-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Đen', 'L'),
 (66, 1, 'QSO09-DEN-M', NULL, N'Quần short thể thao - Đen - M', 'goods', 5, 2, 1, NULL, 179000.0000, 70000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 9, N'Đen', 'M'),
 (67, 1, 'QSO09-DEN-L', NULL, N'Quần short thể thao - Đen - L', 'goods', 5, 2, 1, NULL, 179000.0000, 70000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 9, N'Đen', 'L'),
 (68, 1, 'QSO09-DEN-XL', NULL, N'Quần short thể thao - Đen - XL', 'goods', 5, 2, 1, NULL, 179000.0000, 70000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 9, N'Đen', 'XL'),
-(69, 1, 'QJS06-DEN-29', NULL, N'Quần jeans slim fit - Đen - 29', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '29'),
-(70, 1, 'QJS06-DEN-30', NULL, N'Quần jeans slim fit - Đen - 30', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '30'),
-(71, 1, 'QJS06-DEN-31', NULL, N'Quần jeans slim fit - Đen - 31', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '31'),
-(72, 1, 'QJS06-DEN-32', NULL, N'Quần jeans slim fit - Đen - 32', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '32'),
-(73, 1, 'QJS06-DEN-34', NULL, N'Quần jeans slim fit - Đen - 34', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '34'),
-(74, 1, 'ATB01-DEN-S', NULL, N'Áo thun basic cổ tròn - Đen - S', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Đen', 'S'),
-(75, 1, 'ATB01-DEN-M', NULL, N'Áo thun basic cổ tròn - Đen - M', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Đen', 'M'),
-(76, 1, 'ATB01-DEN-L', NULL, N'Áo thun basic cổ tròn - Đen - L', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Đen', 'L'),
-(77, 1, 'ATB01-DEN-XL', NULL, N'Áo thun basic cổ tròn - Đen - XL', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Đen', 'XL'),
-(78, 1, 'ATP02-DEN-M', NULL, N'Áo polo pique - Đen - M', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Đen', 'M'),
-(79, 1, 'ATP02-DEN-L', NULL, N'Áo polo pique - Đen - L', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Đen', 'L'),
-(80, 1, 'ATP02-DEN-XL', NULL, N'Áo polo pique - Đen - XL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Đen', 'XL'),
-(81, 1, 'ATP02-DEN-XXL', NULL, N'Áo polo pique - Đen - XXL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Đen', 'XXL'),
-(82, 1, 'ATO03-DEN-M', NULL, N'Áo thun oversize in chữ - Đen - M', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Đen', 'M'),
-(83, 1, 'ATO03-DEN-L', NULL, N'Áo thun oversize in chữ - Đen - L', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Đen', 'L'),
-(84, 1, 'ATO03-DEN-XL', NULL, N'Áo thun oversize in chữ - Đen - XL', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Đen', 'XL'),
-(85, 1, 'VDM10-HONG-S', NULL, N'Váy đầm hoa nhí - Hồng - S', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Hồng', 'S'),
-(86, 1, 'VDM10-HONG-M', NULL, N'Váy đầm hoa nhí - Hồng - M', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Hồng', 'M'),
-(87, 1, 'VDM10-HONG-L', NULL, N'Váy đầm hoa nhí - Hồng - L', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Hồng', 'L'),
-(88, 1, 'ASN05-HONG-S', NULL, N'Áo sơ mi nữ lụa - Hồng - S', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Hồng', 'S'),
-(89, 1, 'ASN05-HONG-M', NULL, N'Áo sơ mi nữ lụa - Hồng - M', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Hồng', 'M'),
-(90, 1, 'ASN05-HONG-L', NULL, N'Áo sơ mi nữ lụa - Hồng - L', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Hồng', 'L'),
-(91, 1, 'AKG13-HONG-FREESIZE', NULL, N'Áo khoác gió chống nắng - Hồng - Free size', 'goods', 7, 1, 1, NULL, 299000.0000, 120000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 13, N'Hồng', 'Free size'),
-(92, 1, 'VDM10-KEM-S', NULL, N'Váy đầm hoa nhí - Kem - S', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Kem', 'S'),
-(93, 1, 'VDM10-KEM-M', NULL, N'Váy đầm hoa nhí - Kem - M', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Kem', 'M'),
-(94, 1, 'VDM10-KEM-L', NULL, N'Váy đầm hoa nhí - Kem - L', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Kem', 'L'),
-(95, 1, 'TXK18-KEM', NULL, N'Túi xách nữ đeo chéo - Kem', 'goods', 12, 3, 1, NULL, 459000.0000, 190000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 18, N'Kem', NULL),
-(96, 1, 'TXK18-NAU', NULL, N'Túi xách nữ đeo chéo - Nâu', 'goods', 12, 3, 1, NULL, 459000.0000, 190000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 18, N'Nâu', NULL),
+(69, 1, 'QJS06-DEN-29', NULL, N'Quần jeans slim fit - Đen - 29', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-den-29', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '29'),
+(70, 1, 'QJS06-DEN-30', NULL, N'Quần jeans slim fit - Đen - 30', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-den-30', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '30'),
+(71, 1, 'QJS06-DEN-31', NULL, N'Quần jeans slim fit - Đen - 31', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-den-31', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '31'),
+(72, 1, 'QJS06-DEN-32', NULL, N'Quần jeans slim fit - Đen - 32', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-den-32', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '32'),
+(73, 1, 'QJS06-DEN-34', NULL, N'Quần jeans slim fit - Đen - 34', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-den-34', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Đen', '34'),
+(74, 1, 'ATB01-DEN-S', NULL, N'Áo thun basic cổ tròn - Đen - S', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-den-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Đen', 'S'),
+(75, 1, 'ATB01-DEN-M', NULL, N'Áo thun basic cổ tròn - Đen - M', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-den-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Đen', 'M'),
+(76, 1, 'ATB01-DEN-L', NULL, N'Áo thun basic cổ tròn - Đen - L', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-den-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Đen', 'L'),
+(77, 1, 'ATB01-DEN-XL', NULL, N'Áo thun basic cổ tròn - Đen - XL', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-den-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Đen', 'XL'),
+(78, 1, 'ATP02-DEN-M', NULL, N'Áo polo pique - Đen - M', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-den-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Đen', 'M'),
+(79, 1, 'ATP02-DEN-L', NULL, N'Áo polo pique - Đen - L', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-den-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Đen', 'L'),
+(80, 1, 'ATP02-DEN-XL', NULL, N'Áo polo pique - Đen - XL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-den-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Đen', 'XL'),
+(81, 1, 'ATP02-DEN-XXL', NULL, N'Áo polo pique - Đen - XXL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-den-xxl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Đen', 'XXL'),
+(82, 1, 'ATO03-DEN-M', NULL, N'Áo thun oversize in chữ - Đen - M', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-den-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Đen', 'M'),
+(83, 1, 'ATO03-DEN-L', NULL, N'Áo thun oversize in chữ - Đen - L', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-den-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Đen', 'L'),
+(84, 1, 'ATO03-DEN-XL', NULL, N'Áo thun oversize in chữ - Đen - XL', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-den-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Đen', 'XL'),
+(85, 1, 'VDM10-HONG-S', NULL, N'Váy đầm hoa nhí - Hồng - S', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-hong-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Hồng', 'S'),
+(86, 1, 'VDM10-HONG-M', NULL, N'Váy đầm hoa nhí - Hồng - M', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-hong-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Hồng', 'M'),
+(87, 1, 'VDM10-HONG-L', NULL, N'Váy đầm hoa nhí - Hồng - L', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-hong-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Hồng', 'L'),
+(88, 1, 'ASN05-HONG-S', NULL, N'Áo sơ mi nữ lụa - Hồng - S', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-hong-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Hồng', 'S'),
+(89, 1, 'ASN05-HONG-M', NULL, N'Áo sơ mi nữ lụa - Hồng - M', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-hong-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Hồng', 'M'),
+(90, 1, 'ASN05-HONG-L', NULL, N'Áo sơ mi nữ lụa - Hồng - L', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-hong-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Hồng', 'L'),
+(91, 1, 'AKG13-HONG-FREESIZE', NULL, N'Áo khoác gió chống nắng - Hồng - Free size', 'goods', 7, 1, 1, NULL, 299000.0000, 120000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akg13-hong-freesize', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 13, N'Hồng', 'Free size'),
+(92, 1, 'VDM10-KEM-S', NULL, N'Váy đầm hoa nhí - Kem - S', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-kem-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Kem', 'S'),
+(93, 1, 'VDM10-KEM-M', NULL, N'Váy đầm hoa nhí - Kem - M', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-kem-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Kem', 'M'),
+(94, 1, 'VDM10-KEM-L', NULL, N'Váy đầm hoa nhí - Kem - L', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-kem-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Kem', 'L'),
+(95, 1, 'TXK18-KEM', NULL, N'Túi xách nữ đeo chéo - Kem', 'goods', 12, 3, 1, NULL, 459000.0000, 190000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'txk18-kem', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 18, N'Kem', NULL),
+(96, 1, 'TXK18-NAU', NULL, N'Túi xách nữ đeo chéo - Nâu', 'goods', 12, 3, 1, NULL, 459000.0000, 190000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'txk18-nau', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 18, N'Nâu', NULL),
 (97, 1, 'GTL16-NAU-39', NULL, N'Giày tây da bò - Nâu - 39', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Nâu', '39'),
 (98, 1, 'GTL16-NAU-40', NULL, N'Giày tây da bò - Nâu - 40', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Nâu', '40'),
 (99, 1, 'GTL16-NAU-41', NULL, N'Giày tây da bò - Nâu - 41', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Nâu', '41'),
 (100, 1, 'GTL16-NAU-42', NULL, N'Giày tây da bò - Nâu - 42', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Nâu', '42'),
 (101, 1, 'GTL16-NAU-43', NULL, N'Giày tây da bò - Nâu - 43', 'goods', 10, 5, 21, NULL, 990000.0000, 450000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 16, N'Nâu', '43'),
 (102, 1, 'TAT20-TRANG-FREESIZE', NULL, N'Tất cổ ngắn (combo 3 đôi) - Trắng - Free size', 'goods', 13, 1, 12, NULL, 79000.0000, 28000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 20, N'Trắng', 'Free size'),
-(103, 1, 'AKG13-TRANG-FREESIZE', NULL, N'Áo khoác gió chống nắng - Trắng - Free size', 'goods', 7, 1, 1, NULL, 299000.0000, 120000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 13, N'Trắng', 'Free size'),
-(104, 1, 'GSN14-TRANG-36', NULL, N'Giày sneaker trắng - Trắng - 36', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '36'),
-(105, 1, 'GSN14-TRANG-37', NULL, N'Giày sneaker trắng - Trắng - 37', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '37'),
-(106, 1, 'GSN14-TRANG-38', NULL, N'Giày sneaker trắng - Trắng - 38', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '38'),
-(107, 1, 'GSN14-TRANG-39', NULL, N'Giày sneaker trắng - Trắng - 39', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '39'),
-(108, 1, 'GSN14-TRANG-40', NULL, N'Giày sneaker trắng - Trắng - 40', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '40'),
-(109, 1, 'GSN14-TRANG-41', NULL, N'Giày sneaker trắng - Trắng - 41', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '41'),
-(110, 1, 'GSN14-TRANG-42', NULL, N'Giày sneaker trắng - Trắng - 42', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '42'),
-(111, 1, 'GSN14-TRANG-43', NULL, N'Giày sneaker trắng - Trắng - 43', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '43'),
-(112, 1, 'ATO03-TRANG-M', NULL, N'Áo thun oversize in chữ - Trắng - M', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Trắng', 'M'),
-(113, 1, 'ATO03-TRANG-L', NULL, N'Áo thun oversize in chữ - Trắng - L', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Trắng', 'L'),
-(114, 1, 'ATO03-TRANG-XL', NULL, N'Áo thun oversize in chữ - Trắng - XL', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Trắng', 'XL'),
-(115, 1, 'ATB01-TRANG-S', NULL, N'Áo thun basic cổ tròn - Trắng - S', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Trắng', 'S'),
-(116, 1, 'ATB01-TRANG-M', NULL, N'Áo thun basic cổ tròn - Trắng - M', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Trắng', 'M'),
-(117, 1, 'ATB01-TRANG-L', NULL, N'Áo thun basic cổ tròn - Trắng - L', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Trắng', 'L'),
-(118, 1, 'ATB01-TRANG-XL', NULL, N'Áo thun basic cổ tròn - Trắng - XL', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Trắng', 'XL'),
-(119, 1, 'ASM04-TRANG-S', NULL, N'Áo sơ mi trắng công sở - Trắng - S', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Trắng', 'S'),
-(120, 1, 'ASM04-TRANG-M', NULL, N'Áo sơ mi trắng công sở - Trắng - M', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Trắng', 'M'),
-(121, 1, 'ASM04-TRANG-L', NULL, N'Áo sơ mi trắng công sở - Trắng - L', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Trắng', 'L'),
-(122, 1, 'ASM04-TRANG-XL', NULL, N'Áo sơ mi trắng công sở - Trắng - XL', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Trắng', 'XL'),
-(123, 1, 'ATP02-TRANG-M', NULL, N'Áo polo pique - Trắng - M', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Trắng', 'M'),
-(124, 1, 'ATP02-TRANG-L', NULL, N'Áo polo pique - Trắng - L', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Trắng', 'L'),
-(125, 1, 'ATP02-TRANG-XL', NULL, N'Áo polo pique - Trắng - XL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Trắng', 'XL'),
-(126, 1, 'ATP02-TRANG-XXL', NULL, N'Áo polo pique - Trắng - XXL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Trắng', 'XXL'),
-(127, 1, 'ASN05-TRANG-S', NULL, N'Áo sơ mi nữ lụa - Trắng - S', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Trắng', 'S'),
-(128, 1, 'ASN05-TRANG-M', NULL, N'Áo sơ mi nữ lụa - Trắng - M', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Trắng', 'M'),
-(129, 1, 'ASN05-TRANG-L', NULL, N'Áo sơ mi nữ lụa - Trắng - L', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Trắng', 'L'),
-(130, 1, 'ATB01-XAM-S', NULL, N'Áo thun basic cổ tròn - Xám - S', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xám', 'S'),
-(131, 1, 'ATB01-XAM-M', NULL, N'Áo thun basic cổ tròn - Xám - M', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xám', 'M'),
-(132, 1, 'ATB01-XAM-L', NULL, N'Áo thun basic cổ tròn - Xám - L', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xám', 'L'),
-(133, 1, 'ATB01-XAM-XL', NULL, N'Áo thun basic cổ tròn - Xám - XL', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xám', 'XL'),
+(103, 1, 'AKG13-TRANG-FREESIZE', NULL, N'Áo khoác gió chống nắng - Trắng - Free size', 'goods', 7, 1, 1, NULL, 299000.0000, 120000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akg13-trang-freesize', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 13, N'Trắng', 'Free size'),
+(104, 1, 'GSN14-TRANG-36', NULL, N'Giày sneaker trắng - Trắng - 36', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-trang-36', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '36'),
+(105, 1, 'GSN14-TRANG-37', NULL, N'Giày sneaker trắng - Trắng - 37', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-trang-37', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '37'),
+(106, 1, 'GSN14-TRANG-38', NULL, N'Giày sneaker trắng - Trắng - 38', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-trang-38', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '38'),
+(107, 1, 'GSN14-TRANG-39', NULL, N'Giày sneaker trắng - Trắng - 39', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-trang-39', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '39'),
+(108, 1, 'GSN14-TRANG-40', NULL, N'Giày sneaker trắng - Trắng - 40', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-trang-40', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '40'),
+(109, 1, 'GSN14-TRANG-41', NULL, N'Giày sneaker trắng - Trắng - 41', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-trang-41', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '41'),
+(110, 1, 'GSN14-TRANG-42', NULL, N'Giày sneaker trắng - Trắng - 42', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-trang-42', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '42'),
+(111, 1, 'GSN14-TRANG-43', NULL, N'Giày sneaker trắng - Trắng - 43', 'goods', 8, 5, 21, NULL, 690000.0000, 310000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'gsn14-trang-43', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 14, N'Trắng', '43'),
+(112, 1, 'ATO03-TRANG-M', NULL, N'Áo thun oversize in chữ - Trắng - M', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-trang-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Trắng', 'M'),
+(113, 1, 'ATO03-TRANG-L', NULL, N'Áo thun oversize in chữ - Trắng - L', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-trang-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Trắng', 'L'),
+(114, 1, 'ATO03-TRANG-XL', NULL, N'Áo thun oversize in chữ - Trắng - XL', 'goods', 1, 2, 1, NULL, 199000.0000, 80000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'ato03-trang-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 3, N'Trắng', 'XL'),
+(115, 1, 'ATB01-TRANG-S', NULL, N'Áo thun basic cổ tròn - Trắng - S', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-trang-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Trắng', 'S'),
+(116, 1, 'ATB01-TRANG-M', NULL, N'Áo thun basic cổ tròn - Trắng - M', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-trang-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Trắng', 'M'),
+(117, 1, 'ATB01-TRANG-L', NULL, N'Áo thun basic cổ tròn - Trắng - L', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-trang-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Trắng', 'L'),
+(118, 1, 'ATB01-TRANG-XL', NULL, N'Áo thun basic cổ tròn - Trắng - XL', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-trang-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Trắng', 'XL'),
+(119, 1, 'ASM04-TRANG-S', NULL, N'Áo sơ mi trắng công sở - Trắng - S', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asm04-trang-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Trắng', 'S'),
+(120, 1, 'ASM04-TRANG-M', NULL, N'Áo sơ mi trắng công sở - Trắng - M', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asm04-trang-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Trắng', 'M'),
+(121, 1, 'ASM04-TRANG-L', NULL, N'Áo sơ mi trắng công sở - Trắng - L', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asm04-trang-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Trắng', 'L'),
+(122, 1, 'ASM04-TRANG-XL', NULL, N'Áo sơ mi trắng công sở - Trắng - XL', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asm04-trang-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Trắng', 'XL'),
+(123, 1, 'ATP02-TRANG-M', NULL, N'Áo polo pique - Trắng - M', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-trang-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Trắng', 'M'),
+(124, 1, 'ATP02-TRANG-L', NULL, N'Áo polo pique - Trắng - L', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-trang-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Trắng', 'L'),
+(125, 1, 'ATP02-TRANG-XL', NULL, N'Áo polo pique - Trắng - XL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-trang-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Trắng', 'XL'),
+(126, 1, 'ATP02-TRANG-XXL', NULL, N'Áo polo pique - Trắng - XXL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-trang-xxl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Trắng', 'XXL'),
+(127, 1, 'ASN05-TRANG-S', NULL, N'Áo sơ mi nữ lụa - Trắng - S', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-trang-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Trắng', 'S'),
+(128, 1, 'ASN05-TRANG-M', NULL, N'Áo sơ mi nữ lụa - Trắng - M', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-trang-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Trắng', 'M'),
+(129, 1, 'ASN05-TRANG-L', NULL, N'Áo sơ mi nữ lụa - Trắng - L', 'goods', 2, 3, 1, NULL, 359000.0000, 150000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asn05-trang-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 5, N'Trắng', 'L'),
+(130, 1, 'ATB01-XAM-S', NULL, N'Áo thun basic cổ tròn - Xám - S', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-xam-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xám', 'S'),
+(131, 1, 'ATB01-XAM-M', NULL, N'Áo thun basic cổ tròn - Xám - M', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-xam-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xám', 'M'),
+(132, 1, 'ATB01-XAM-L', NULL, N'Áo thun basic cổ tròn - Xám - L', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-xam-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xám', 'L'),
+(133, 1, 'ATB01-XAM-XL', NULL, N'Áo thun basic cổ tròn - Xám - XL', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-xam-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xám', 'XL'),
 (134, 1, 'QSO09-XAM-M', NULL, N'Quần short thể thao - Xám - M', 'goods', 5, 2, 1, NULL, 179000.0000, 70000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 9, N'Xám', 'M'),
 (135, 1, 'QSO09-XAM-L', NULL, N'Quần short thể thao - Xám - L', 'goods', 5, 2, 1, NULL, 179000.0000, 70000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 9, N'Xám', 'L'),
 (136, 1, 'QSO09-XAM-XL', NULL, N'Quần short thể thao - Xám - XL', 'goods', 5, 2, 1, NULL, 179000.0000, 70000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 9, N'Xám', 'XL'),
-(137, 1, 'VDM10-XANHDUON-S', NULL, N'Váy đầm hoa nhí - Xanh dương - S', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Xanh dương', 'S'),
-(138, 1, 'VDM10-XANHDUON-M', NULL, N'Váy đầm hoa nhí - Xanh dương - M', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Xanh dương', 'M'),
-(139, 1, 'VDM10-XANHDUON-L', NULL, N'Váy đầm hoa nhí - Xanh dương - L', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Xanh dương', 'L'),
-(140, 1, 'AKG13-XANHDUON-FREESIZE', NULL, N'Áo khoác gió chống nắng - Xanh dương - Free size', 'goods', 7, 1, 1, NULL, 299000.0000, 120000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 13, N'Xanh dương', 'Free size'),
-(141, 1, 'ASM04-XANHDUON-S', NULL, N'Áo sơ mi trắng công sở - Xanh dương - S', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Xanh dương', 'S'),
-(142, 1, 'ASM04-XANHDUON-M', NULL, N'Áo sơ mi trắng công sở - Xanh dương - M', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Xanh dương', 'M'),
-(143, 1, 'ASM04-XANHDUON-L', NULL, N'Áo sơ mi trắng công sở - Xanh dương - L', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Xanh dương', 'L'),
-(144, 1, 'ASM04-XANHDUON-XL', NULL, N'Áo sơ mi trắng công sở - Xanh dương - XL', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Xanh dương', 'XL'),
-(145, 1, 'QJS06-XANHJEAN-29', NULL, N'Quần jeans slim fit - Xanh jean - 29', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '29'),
-(146, 1, 'QJS06-XANHJEAN-30', NULL, N'Quần jeans slim fit - Xanh jean - 30', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '30'),
-(147, 1, 'QJS06-XANHJEAN-31', NULL, N'Quần jeans slim fit - Xanh jean - 31', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '31'),
-(148, 1, 'QJS06-XANHJEAN-32', NULL, N'Quần jeans slim fit - Xanh jean - 32', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '32'),
-(149, 1, 'QJS06-XANHJEAN-34', NULL, N'Quần jeans slim fit - Xanh jean - 34', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '34'),
-(150, 1, 'ATB01-XANHNAVY-S', NULL, N'Áo thun basic cổ tròn - Xanh navy - S', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xanh navy', 'S'),
-(151, 1, 'ATB01-XANHNAVY-M', NULL, N'Áo thun basic cổ tròn - Xanh navy - M', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xanh navy', 'M'),
-(152, 1, 'ATB01-XANHNAVY-L', NULL, N'Áo thun basic cổ tròn - Xanh navy - L', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xanh navy', 'L'),
-(153, 1, 'ATB01-XANHNAVY-XL', NULL, N'Áo thun basic cổ tròn - Xanh navy - XL', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xanh navy', 'XL'),
-(154, 1, 'ATP02-XANHNAVY-M', NULL, N'Áo polo pique - Xanh navy - M', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Xanh navy', 'M'),
-(155, 1, 'ATP02-XANHNAVY-L', NULL, N'Áo polo pique - Xanh navy - L', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Xanh navy', 'L'),
-(156, 1, 'ATP02-XANHNAVY-XL', NULL, N'Áo polo pique - Xanh navy - XL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Xanh navy', 'XL'),
-(157, 1, 'ATP02-XANHNAVY-XXL', NULL, N'Áo polo pique - Xanh navy - XXL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Xanh navy', 'XXL'),
+(137, 1, 'VDM10-XANHDUON-S', NULL, N'Váy đầm hoa nhí - Xanh dương - S', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-xanhduon-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Xanh dương', 'S'),
+(138, 1, 'VDM10-XANHDUON-M', NULL, N'Váy đầm hoa nhí - Xanh dương - M', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-xanhduon-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Xanh dương', 'M'),
+(139, 1, 'VDM10-XANHDUON-L', NULL, N'Váy đầm hoa nhí - Xanh dương - L', 'goods', 6, 3, 1, NULL, 399000.0000, 160000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'vdm10-xanhduon-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 10, N'Xanh dương', 'L'),
+(140, 1, 'AKG13-XANHDUON-FREESIZE', NULL, N'Áo khoác gió chống nắng - Xanh dương - Free size', 'goods', 7, 1, 1, NULL, 299000.0000, 120000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akg13-xanhduon-freesize', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 13, N'Xanh dương', 'Free size'),
+(141, 1, 'ASM04-XANHDUON-S', NULL, N'Áo sơ mi trắng công sở - Xanh dương - S', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asm04-xanhduon-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Xanh dương', 'S'),
+(142, 1, 'ASM04-XANHDUON-M', NULL, N'Áo sơ mi trắng công sở - Xanh dương - M', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asm04-xanhduon-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Xanh dương', 'M'),
+(143, 1, 'ASM04-XANHDUON-L', NULL, N'Áo sơ mi trắng công sở - Xanh dương - L', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asm04-xanhduon-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Xanh dương', 'L'),
+(144, 1, 'ASM04-XANHDUON-XL', NULL, N'Áo sơ mi trắng công sở - Xanh dương - XL', 'goods', 2, 3, 1, NULL, 329000.0000, 140000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'asm04-xanhduon-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 4, N'Xanh dương', 'XL'),
+(145, 1, 'QJS06-XANHJEAN-29', NULL, N'Quần jeans slim fit - Xanh jean - 29', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-xanhjean-29', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '29'),
+(146, 1, 'QJS06-XANHJEAN-30', NULL, N'Quần jeans slim fit - Xanh jean - 30', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-xanhjean-30', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '30'),
+(147, 1, 'QJS06-XANHJEAN-31', NULL, N'Quần jeans slim fit - Xanh jean - 31', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-xanhjean-31', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '31'),
+(148, 1, 'QJS06-XANHJEAN-32', NULL, N'Quần jeans slim fit - Xanh jean - 32', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-xanhjean-32', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '32'),
+(149, 1, 'QJS06-XANHJEAN-34', NULL, N'Quần jeans slim fit - Xanh jean - 34', 'goods', 3, 4, 1, NULL, 459000.0000, 200000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjs06-xanhjean-34', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 6, N'Xanh jean', '34'),
+(150, 1, 'ATB01-XANHNAVY-S', NULL, N'Áo thun basic cổ tròn - Xanh navy - S', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-xanhnavy-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xanh navy', 'S'),
+(151, 1, 'ATB01-XANHNAVY-M', NULL, N'Áo thun basic cổ tròn - Xanh navy - M', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-xanhnavy-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xanh navy', 'M'),
+(152, 1, 'ATB01-XANHNAVY-L', NULL, N'Áo thun basic cổ tròn - Xanh navy - L', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-xanhnavy-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xanh navy', 'L'),
+(153, 1, 'ATB01-XANHNAVY-XL', NULL, N'Áo thun basic cổ tròn - Xanh navy - XL', 'goods', 1, 1, 1, NULL, 159000.0000, 65000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atb01-xanhnavy-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 1, N'Xanh navy', 'XL'),
+(154, 1, 'ATP02-XANHNAVY-M', NULL, N'Áo polo pique - Xanh navy - M', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-xanhnavy-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Xanh navy', 'M'),
+(155, 1, 'ATP02-XANHNAVY-L', NULL, N'Áo polo pique - Xanh navy - L', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-xanhnavy-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Xanh navy', 'L'),
+(156, 1, 'ATP02-XANHNAVY-XL', NULL, N'Áo polo pique - Xanh navy - XL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-xanhnavy-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Xanh navy', 'XL'),
+(157, 1, 'ATP02-XANHNAVY-XXL', NULL, N'Áo polo pique - Xanh navy - XXL', 'goods', 1, 1, 1, NULL, 249000.0000, 105000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'atp02-xanhnavy-xxl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 2, N'Xanh navy', 'XXL'),
 (158, 1, 'QKK08-XANHNAVY-29', NULL, N'Quần kaki chinos - Xanh navy - 29', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Xanh navy', '29'),
 (159, 1, 'QKK08-XANHNAVY-30', NULL, N'Quần kaki chinos - Xanh navy - 30', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Xanh navy', '30'),
 (160, 1, 'QKK08-XANHNAVY-31', NULL, N'Quần kaki chinos - Xanh navy - 31', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Xanh navy', '31'),
 (161, 1, 'QKK08-XANHNAVY-32', NULL, N'Quần kaki chinos - Xanh navy - 32', 'goods', 4, 1, 1, NULL, 389000.0000, 165000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 8, N'Xanh navy', '32'),
 (162, 1, 'MLT19-XANHNAVY-FREESIZE', NULL, N'Mũ lưỡi trai - Xanh navy - Free size', 'goods', 13, 2, 1, NULL, 129000.0000, 45000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 19, N'Xanh navy', 'Free size'),
-(163, 1, 'QJN07-XANHNHAT-S', NULL, N'Quần jeans nữ ống rộng - Xanh nhạt - S', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Xanh nhạt', 'S'),
-(164, 1, 'QJN07-XANHNHAT-M', NULL, N'Quần jeans nữ ống rộng - Xanh nhạt - M', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Xanh nhạt', 'M'),
-(165, 1, 'QJN07-XANHNHAT-L', NULL, N'Quần jeans nữ ống rộng - Xanh nhạt - L', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Xanh nhạt', 'L'),
-(166, 1, 'AKB12-XANHREU-M', NULL, N'Áo khoác bomber - Xanh rêu - M', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Xanh rêu', 'M'),
-(167, 1, 'AKB12-XANHREU-L', NULL, N'Áo khoác bomber - Xanh rêu - L', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Xanh rêu', 'L'),
-(168, 1, 'AKB12-XANHREU-XL', NULL, N'Áo khoác bomber - Xanh rêu - XL', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Xanh rêu', 'XL')
+(163, 1, 'QJN07-XANHNHAT-S', NULL, N'Quần jeans nữ ống rộng - Xanh nhạt - S', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjn07-xanhnhat-s', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Xanh nhạt', 'S'),
+(164, 1, 'QJN07-XANHNHAT-M', NULL, N'Quần jeans nữ ống rộng - Xanh nhạt - M', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjn07-xanhnhat-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Xanh nhạt', 'M'),
+(165, 1, 'QJN07-XANHNHAT-L', NULL, N'Quần jeans nữ ống rộng - Xanh nhạt - L', 'goods', 3, 4, 1, NULL, 429000.0000, 185000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'qjn07-xanhnhat-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 7, N'Xanh nhạt', 'L'),
+(166, 1, 'AKB12-XANHREU-M', NULL, N'Áo khoác bomber - Xanh rêu - M', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akb12-xanhreu-m', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Xanh rêu', 'M'),
+(167, 1, 'AKB12-XANHREU-L', NULL, N'Áo khoác bomber - Xanh rêu - L', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akb12-xanhreu-l', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Xanh rêu', 'L'),
+(168, 1, 'AKB12-XANHREU-XL', NULL, N'Áo khoác bomber - Xanh rêu - XL', 'goods', 7, 2, 1, NULL, 599000.0000, 260000.0000, 'average', NULL, NULL, 1, 1, 1, 'none', 3.0000, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 1, 'akb12-xanhreu-xl', 1, '2026-09-19T09:42:54.7200000', 1, NULL, NULL, 0, 12, N'Xanh rêu', 'XL')
 ;
 SET IDENTITY_INSERT [md].[Products] OFF;
 GO
@@ -7484,6 +7710,94 @@ INSERT INTO [mkt].[Campaigns] ([Id], [CompanyId], [Code], [Name], [Channel], [St
 SET IDENTITY_INSERT [mkt].[Campaigns] OFF;
 GO
 
+-- prj.ProjectMembers (16 dòng)
+INSERT INTO [prj].[ProjectMembers] ([ProjectId], [UserId], [MemberRole], [JoinedAt]) VALUES
+(1, 1, 'member', '2026-11-21T03:09:29.4210000'),
+(1, 2, 'manager', '2026-11-21T03:09:29.4210000'),
+(1, 3, 'member', '2026-11-21T03:09:29.4210000'),
+(1, 4, 'member', '2026-11-21T03:09:29.4210000'),
+(1, 6, 'member', '2026-11-21T03:09:29.4210000'),
+(1, 7, 'member', '2026-11-21T03:09:29.4210000'),
+(2, 1, 'member', '2026-11-21T03:09:29.4210000'),
+(2, 3, 'member', '2026-11-21T03:09:29.4210000'),
+(2, 5, 'member', '2026-11-21T03:09:29.4210000'),
+(2, 7, 'manager', '2026-11-21T03:09:29.4210000'),
+(3, 1, 'member', '2026-11-21T03:09:29.4210000'),
+(3, 4, 'member', '2026-11-21T03:09:29.4210000'),
+(3, 6, 'manager', '2026-11-21T03:09:29.4210000'),
+(4, 1, 'member', '2026-11-21T03:09:29.4210000'),
+(4, 5, 'manager', '2026-11-21T03:09:29.4210000'),
+(4, 7, 'member', '2026-11-21T03:09:29.4210000')
+;
+GO
+
+-- prj.Projects (4 dòng)
+SET IDENTITY_INSERT [prj].[Projects] ON;
+INSERT INTO [prj].[Projects] ([Id], [CompanyId], [Code], [Name], [PartnerId], [SalesOrderId], [ManagerUserId], [DepartmentId], [StartDate], [EndDate], [Budget], [Status], [ProgressPercent], [Description], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
+(1, 1, 'DA2026-001', N'Khai trương chi nhánh Quận 7', NULL, NULL, 2, 10, '2026-11-01', '2026-12-16', 150000000.00, 'active', 45.00, N'Mặt bằng 45 Nguyễn Thị Thập, Q.7. Mục tiêu khai trương trước 20/12 để kịp mùa Tết.', '2026-10-29T03:09:29.2720000', 1, NULL, NULL, 0),
+(2, 1, 'DA2026-002', N'Chụp lookbook Tết 2027', NULL, NULL, 7, 3, '2026-11-11', '2026-12-03', 35000000.00, 'active', 41.67, N'40 outfit BST Tết, ảnh dùng cho website, Facebook, TikTok và in standee.', '2026-11-08T03:09:29.2720000', 1, NULL, NULL, 0),
+(3, 1, 'DA2026-003', N'Kiểm kê kho cuối năm 2026', NULL, NULL, 6, 5, '2026-12-16', '2026-12-21', 0.00, 'planning', 0.00, N'Kiểm kê toàn bộ kho KHO01, đối chiếu sổ sách trước khi khóa sổ năm.', '2026-12-13T03:09:29.2720000', 1, NULL, NULL, 0),
+(4, 1, 'DA2026-004', N'Ra mắt website mystyle.vn', NULL, NULL, 5, 2, '2026-09-22', '2026-11-01', 25000000.00, 'completed', 100.00, N'Website bán hàng kết nối kho, đơn online đổ thẳng về app Đơn hàng.', '2026-09-19T03:09:29.2720000', 1, NULL, NULL, 0)
+;
+SET IDENTITY_INSERT [prj].[Projects] OFF;
+GO
+
+-- prj.TaskChecklistItems (16 dòng)
+SET IDENTITY_INSERT [prj].[TaskChecklistItems] ON;
+INSERT INTO [prj].[TaskChecklistItems] ([Id], [TaskId], [Title], [IsDone], [SortOrder]) VALUES
+(1, 3, N'Vẽ layout cửa hàng', 1, 10),
+(2, 3, N'Chốt báo giá thi công', 1, 20),
+(3, 3, N'Lắp kệ, móc treo', 0, 30),
+(4, 3, N'Lắp đèn, gương phòng thử', 0, 40),
+(5, 3, N'Nghiệm thu', 0, 50),
+(6, 11, N'Nam: 15 outfit', 1, 10),
+(7, 11, N'Nữ: 20 outfit', 0, 20),
+(8, 11, N'Phụ kiện, giày đi kèm', 1, 30),
+(9, 11, N'Chốt danh sách với Mai', 0, 40),
+(10, 12, N'Chuẩn bị đồ, là ủi', 0, 10),
+(11, 12, N'Shotlist từng outfit', 0, 20),
+(12, 23, N'Chị Hoa - 0901***', 1, 10),
+(13, 23, N'Anh Long', 1, 20),
+(14, 23, N'Chị Trang', 0, 30),
+(15, 23, N'Anh Phúc', 0, 40),
+(16, 23, N'Chị Ngọc', 0, 50)
+;
+SET IDENTITY_INSERT [prj].[TaskChecklistItems] OFF;
+GO
+
+-- prj.Tasks (26 dòng)
+SET IDENTITY_INSERT [prj].[Tasks] ON;
+INSERT INTO [prj].[Tasks] ([Id], [CompanyId], [Code], [ProjectId], [ParentTaskId], [Title], [Description], [StageId], [Priority], [AssigneeUserId], [ReporterUserId], [DepartmentId], [EntityName], [EntityId], [StartDate], [DueDate], [CompletedAt], [EstimatedHours], [ProgressPercent], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
+(1, 1, 'CV-000001', 1, NULL, N'Ký hợp đồng thuê mặt bằng 45 Nguyễn Thị Thập', N'Thuê 3 năm, cọc 3 tháng. Hợp đồng lưu ở app Tài liệu.', 4, 'high', 2, 2, 10, NULL, NULL, '2026-10-30', '2026-11-06T00:00:00.0000000', '2026-11-05T03:09:29.2720000', 4.00, 100.00, 0, '2026-10-27T03:09:29.2720000', 2, NULL, NULL, 0),
+(2, 1, 'CV-000002', 1, NULL, N'Đăng ký hộ kinh doanh chi nhánh', NULL, 4, 'normal', 2, 2, 10, NULL, NULL, '2026-11-04', '2026-11-11T00:00:00.0000000', '2026-11-12T03:09:29.2720000', 3.00, 100.00, 0, '2026-11-01T03:09:29.2720000', 2, NULL, NULL, 0),
+(3, 1, 'CV-000003', 1, NULL, N'Thi công nội thất, kệ trưng bày', N'Đơn vị thi công: Nội thất Hòa Phát Decor. Nghiệm thu trước khi nhập hàng.', 2, 'high', 2, 2, 10, NULL, NULL, '2026-11-21', '2026-11-28T00:00:00.0000000', NULL, 40.00, 40.00, 0, '2026-11-18T03:09:29.2720000', 2, NULL, NULL, 0),
+(4, 1, 'CV-000004', 1, NULL, N'Tuyển 3 nhân viên bán hàng ca xoay', N'Đăng tin Facebook group việc làm Q7, phỏng vấn tại cửa hàng Lê Lợi.', 2, 'normal', 2, 2, 10, NULL, NULL, '2026-11-24', '2026-12-01T00:00:00.0000000', NULL, 12.00, 30.00, 0, '2026-11-21T03:09:29.2720000', 2, NULL, NULL, 0),
+(5, 1, 'CV-000005', 1, NULL, N'Thiết kế standee, banner khai trương', N'Đã gửi bản thiết kế, chờ chị Nhung duyệt.', 3, 'high', 7, 2, 3, NULL, NULL, '2026-11-12', '2026-11-19T00:00:00.0000000', NULL, 10.00, 90.00, 0, '2026-11-09T03:09:29.2720000', 2, NULL, NULL, 0),
+(6, 1, 'CV-000006', 1, NULL, N'Lắp đặt máy POS, camera, wifi', NULL, 1, 'normal', 4, 2, 10, NULL, NULL, '2026-11-29', '2026-12-06T00:00:00.0000000', NULL, 6.00, 0.00, 0, '2026-11-26T03:09:29.2720000', 2, NULL, NULL, 0),
+(7, 1, 'CV-000007', 1, NULL, N'Nhập hàng trưng bày khai trương (300 SKU)', N'Lấy danh sách SKU bán chạy 60 ngày ở app Báo cáo.', 1, 'normal', 6, 2, 5, NULL, NULL, '2026-12-02', '2026-12-09T00:00:00.0000000', NULL, 16.00, 0.00, 0, '2026-11-29T03:09:29.2720000', 2, NULL, NULL, 0),
+(8, 1, 'CV-000008', 1, NULL, N'Chạy quảng cáo Facebook bán kính 3km quanh Q7', N'Gắn mã giảm giá KHAITRUONG cho chiến dịch để đo doanh thu.', 1, 'high', 7, 2, 3, NULL, NULL, '2026-12-04', '2026-12-11T00:00:00.0000000', NULL, 8.00, 0.00, 0, '2026-12-01T03:09:29.2720000', 2, NULL, NULL, 0),
+(9, 1, 'CV-000009', 2, NULL, N'Chốt concept & moodboard', NULL, 4, 'normal', 7, 7, 3, NULL, NULL, '2026-11-08', '2026-11-15T00:00:00.0000000', '2026-11-14T03:09:29.2720000', 6.00, 100.00, 0, '2026-11-05T03:09:29.2720000', 7, NULL, NULL, 0),
+(10, 1, 'CV-000010', 2, NULL, N'Book studio và người mẫu', NULL, 4, 'normal', 7, 7, 3, NULL, NULL, '2026-11-11', '2026-11-18T00:00:00.0000000', '2026-11-17T03:09:29.2720000', 3.00, 100.00, 0, '2026-11-08T03:09:29.2720000', 7, NULL, NULL, 0),
+(11, 1, 'CV-000011', 2, NULL, N'Chọn 40 outfit từ BST Tết', NULL, 2, 'high', 5, 7, 2, NULL, NULL, '2026-11-16', '2026-11-23T00:00:00.0000000', NULL, 8.00, 50.00, 0, '2026-11-13T03:09:29.2720000', 7, NULL, NULL, 0),
+(12, 1, 'CV-000012', 2, NULL, N'Chụp ảnh 2 ngày tại studio', NULL, 1, 'urgent', 7, 7, 3, NULL, NULL, '2026-11-19', '2026-11-26T00:00:00.0000000', NULL, 16.00, 0.00, 0, '2026-11-16T03:09:29.2720000', 7, NULL, NULL, 0),
+(13, 1, 'CV-000013', 2, NULL, N'Retouch & xuất ảnh cho website / social', NULL, 1, 'normal', 5, 7, 2, NULL, NULL, '2026-11-23', '2026-11-30T00:00:00.0000000', NULL, 12.00, 0.00, 0, '2026-11-20T03:09:29.2720000', 7, NULL, NULL, 0),
+(14, 1, 'CV-000014', 2, NULL, N'Đăng lookbook lên website và Facebook', NULL, 1, 'normal', 5, 7, 2, NULL, NULL, '2026-11-26', '2026-12-03T00:00:00.0000000', NULL, 3.00, 0.00, 0, '2026-11-23T03:09:29.2720000', 7, NULL, NULL, 0),
+(15, 1, 'CV-000015', 3, NULL, N'Lập kế hoạch kiểm kê, chia khu vực kệ', NULL, 1, 'normal', 6, 6, 5, NULL, NULL, '2026-12-04', '2026-12-11T00:00:00.0000000', NULL, 4.00, 0.00, 0, '2026-12-01T03:09:29.2720000', 6, NULL, NULL, 0),
+(16, 1, 'CV-000016', 3, NULL, N'In phiếu kiểm kê theo kệ', NULL, 1, 'low', 4, 6, 5, NULL, NULL, '2026-12-08', '2026-12-15T00:00:00.0000000', NULL, 2.00, 0.00, 0, '2026-12-05T03:09:29.2720000', 6, NULL, NULL, 0),
+(17, 1, 'CV-000017', 3, NULL, N'Đối chiếu chênh lệch, lập biên bản kiểm kê', NULL, 1, 'normal', 6, 6, 5, NULL, NULL, '2026-12-14', '2026-12-21T00:00:00.0000000', NULL, 6.00, 0.00, 0, '2026-12-11T03:09:29.2720000', 6, NULL, NULL, 0),
+(18, 1, 'CV-000018', 4, NULL, N'Chọn giao diện, cấu hình tên miền', NULL, 4, 'normal', 5, 5, 2, NULL, NULL, '2026-09-25', '2026-10-02T00:00:00.0000000', '2026-09-30T03:09:29.2720000', 8.00, 100.00, 0, '2026-09-22T03:09:29.2720000', 5, NULL, NULL, 0),
+(19, 1, 'CV-000019', 4, NULL, N'Chụp ảnh sản phẩm, viết mô tả 20 mẫu', NULL, 4, 'normal', 7, 5, 3, NULL, NULL, '2026-10-10', '2026-10-17T00:00:00.0000000', '2026-10-16T03:09:29.2720000', 24.00, 100.00, 0, '2026-10-07T03:09:29.2720000', 5, NULL, NULL, 0),
+(20, 1, 'CV-000020', 4, NULL, N'Kết nối đơn online về app Đơn hàng', NULL, 4, 'high', 1, 5, NULL, NULL, NULL, '2026-10-17', '2026-10-24T00:00:00.0000000', '2026-10-23T03:09:29.2720000', 6.00, 100.00, 0, '2026-10-14T03:09:29.2720000', 5, NULL, NULL, 0),
+(21, 1, 'CV-000021', 4, NULL, N'Chạy thử, sửa lỗi và mở bán', NULL, 4, 'high', 5, 5, 2, NULL, NULL, '2026-10-25', '2026-11-01T00:00:00.0000000', '2026-11-01T03:09:29.2720000', 6.00, 100.00, 0, '2026-10-22T03:09:29.2720000', 5, NULL, NULL, 0),
+(22, 1, 'CV-000022', NULL, NULL, N'Xuất hóa đơn VAT tháng 11 cho khách sỉ', N'Giao cho phòng Kế toán. Danh sách khách cần hóa đơn: xem đơn có ghi chú "lấy VAT".', 1, 'normal', NULL, 1, 4, NULL, NULL, '2026-11-17', '2026-11-24T00:00:00.0000000', NULL, 2.00, 0.00, 0, '2026-11-14T03:09:29.2720000', 1, NULL, NULL, 0),
+(23, 1, 'CV-000023', NULL, NULL, N'Gọi lại 5 khách VIP lâu chưa mua', N'Danh sách ở app Marketing > Nhóm khách hàng > Sắp mất.', 2, 'high', 3, 1, 10, NULL, NULL, '2026-11-13', '2026-11-20T00:00:00.0000000', NULL, 2.00, 40.00, 0, '2026-11-10T03:09:29.2720000', 1, NULL, NULL, 0),
+(24, 1, 'CV-000024', NULL, NULL, N'Kiểm tra hàng lỗi đổi trả tuần này', NULL, 1, 'normal', 6, 1, 5, NULL, NULL, '2026-11-16', '2026-11-23T00:00:00.0000000', NULL, 2.00, 0.00, 0, '2026-11-13T03:09:29.2720000', 1, NULL, NULL, 0),
+(25, 1, 'CV-000025', NULL, NULL, N'Cập nhật giá Shopee sau đợt sale 11.11', NULL, 4, 'normal', 5, 1, 2, NULL, NULL, '2026-11-08', '2026-11-15T00:00:00.0000000', '2026-11-14T03:09:29.2720000', 2.00, 100.00, 0, '2026-11-05T03:09:29.2720000', 1, NULL, NULL, 0),
+(26, 1, 'CV-000026', NULL, NULL, N'Duyệt kế hoạch marketing tháng 12', N'Mai gửi kế hoạch: ngân sách 30 triệu, 3 chiến dịch.', 3, 'high', 1, 1, NULL, NULL, NULL, '2026-11-18', '2026-11-25T00:00:00.0000000', NULL, 1.00, 80.00, 0, '2026-11-15T03:09:29.2720000', 1, NULL, NULL, 0)
+;
+SET IDENTITY_INSERT [prj].[Tasks] OFF;
+GO
+
 -- prj.TaskStages (4 dòng)
 SET IDENTITY_INSERT [prj].[TaskStages] ON;
 INSERT INTO [prj].[TaskStages] ([Id], [CompanyId], [ProjectId], [Name], [SortOrder], [IsDone]) VALUES
@@ -7493,6 +7807,25 @@ INSERT INTO [prj].[TaskStages] ([Id], [CompanyId], [ProjectId], [Name], [SortOrd
 (4, 1, NULL, N'Hoàn thành', 40, 1)
 ;
 SET IDENTITY_INSERT [prj].[TaskStages] OFF;
+GO
+
+-- prj.Timesheets (12 dòng)
+SET IDENTITY_INSERT [prj].[Timesheets] ON;
+INSERT INTO [prj].[Timesheets] ([Id], [TaskId], [ProjectId], [UserId], [WorkDate], [Hours], [Note], [IsBillable], [CreatedAt]) VALUES
+(1, 1, 1, 2, '2026-11-04', 3.00, N'Đàm phán với chủ nhà', 0, '2026-11-04T03:09:29.2720000'),
+(2, 1, 1, 2, '2026-11-05', 1.50, N'Ký hợp đồng', 0, '2026-11-05T03:09:29.2720000'),
+(3, 3, 1, 2, '2026-11-15', 4.00, N'Làm việc với đơn vị thi công', 0, '2026-11-15T03:09:29.2720000'),
+(4, 3, 1, 2, '2026-11-19', 3.50, N'Giám sát lắp kệ', 0, '2026-11-19T03:09:29.2720000'),
+(5, 5, 1, 7, '2026-11-17', 5.00, N'Thiết kế bản 1', 0, '2026-11-17T03:09:29.2720000'),
+(6, 5, 1, 7, '2026-11-18', 3.00, N'Sửa theo góp ý', 0, '2026-11-18T03:09:29.2720000'),
+(7, 9, 2, 7, '2026-11-13', 4.00, NULL, 0, '2026-11-13T03:09:29.2720000'),
+(8, 11, 2, 5, '2026-11-20', 4.00, N'Chọn đồ nam + phụ kiện', 0, '2026-11-20T03:09:29.2720000'),
+(9, 19, 4, 7, '2026-10-12', 8.00, NULL, 0, '2026-10-12T03:09:29.2720000'),
+(10, 19, 4, 7, '2026-10-14', 8.00, NULL, 0, '2026-10-14T03:09:29.2720000'),
+(11, 20, 4, 1, '2026-10-22', 6.00, NULL, 0, '2026-10-22T03:09:29.2720000'),
+(12, 23, NULL, 3, '2026-11-20', 1.00, N'Gọi được 2/5 khách', 0, '2026-11-20T03:09:29.2720000')
+;
+SET IDENTITY_INSERT [prj].[Timesheets] OFF;
 GO
 
 -- pur.PurchaseOrderLines (320 dòng)
@@ -8418,6 +8751,133 @@ INSERT INTO [sales].[SalesReturns] ([Id], [CompanyId], [DocNo], [SalesOrderId], 
 (3, 1, 'TH2611-00003', 121, 29, 1, '2026-11-16T12:00:00.0000000', N'Khách đổi ý', 'cash', 'refunded', 299000.00, 0.00, 299000.00, 159, '2026-11-16T12:00:00.0000000', 1, NULL, NULL, 0)
 ;
 SET IDENTITY_INSERT [sales].[SalesReturns] OFF;
+GO
+
+-- web.ContactSubmissions (8 dòng)
+SET IDENTITY_INSERT [web].[ContactSubmissions] ON;
+INSERT INTO [web].[ContactSubmissions] ([Id], [SiteId], [FormCode], [FullName], [Phone], [Email], [Message], [PageUrl], [UtmSource], [UtmMedium], [UtmCampaign], [IpAddress], [ConsentGiven], [LeadId], [CreatedAt]) VALUES
+(1, 1, 'contact', N'Lý Thanh Tâm', '0763222111', NULL, N'Mình muốn đặt 30 áo polo in logo cho công ty, báo giá giúp mình.', '/lien-he', 'facebook', 'cpc', 'blackfriday', '113.161.10.20', 1, 12, '2026-11-09T03:09:29.2720000'),
+(2, 1, 'contact', N'Tạ Minh Nhật', '0981555444', 'nhat.ta@nhatminh.com.vn', N'Cần đồng phục cho 50 nhân viên văn phòng.', '/lien-he', 'google', 'cpc', NULL, '27.72.101.5', 1, 15, '2026-11-12T03:09:29.2720000'),
+(3, 1, 'contact', N'Nguyễn Thu Hà', '0912678345', 'thuha.ng@gmail.com', N'Váy đầm hoa nhí size M còn màu xanh không shop?', '/products/vay-dam-hoa-nhi-vdm10', 'tiktok', 'social', NULL, '171.244.5.9', 1, NULL, '2026-11-17T03:09:29.2720000'),
+(4, 1, 'contact', N'Trần Quốc Bảo', '0938456123', NULL, N'Giày tây da bò có size 44 không? Mình ở Q7, đợi chi nhánh mới mở.', '/products', NULL, NULL, NULL, '14.161.22.8', 1, NULL, '2026-11-18T03:09:29.2720000'),
+(5, 1, 'contact', N'Phạm Ngọc Ánh', NULL, 'anh.pham.ngoc@yahoo.com', N'Mình muốn hợp tác làm CTV bán hàng online.', '/lien-he', 'facebook', 'social', NULL, '42.116.7.77', 1, NULL, '2026-11-19T03:09:29.2720000'),
+(6, 1, 'contact', N'Đỗ Hải Yến', '0909887766', NULL, N'Đơn hàng của mình giao chậm, nhờ shop kiểm tra giúp.', '/lien-he', NULL, NULL, NULL, '113.23.45.67', 1, NULL, '2026-11-20T07:09:29.2720000'),
+(7, 1, 'contact', N'Võ Minh Khang', '0977112233', 'khang.vm@outlook.com', N'Có ship COD ra Đà Nẵng không ạ?', '/pages/chinh-sach-giao-hang', 'google', 'organic', NULL, '1.53.88.21', 1, NULL, '2026-11-20T21:09:29.2720000'),
+(8, 1, 'contact', N'Lâm Gia Hân', '0868999000', NULL, N'Mã BLACKFRIDAY dùng cho đơn online được không shop?', '/blog/black-friday-giam-den-50', 'facebook', 'cpc', 'blackfriday', '116.110.4.3', 1, NULL, '2026-11-21T01:09:29.2720000')
+;
+SET IDENTITY_INSERT [web].[ContactSubmissions] OFF;
+GO
+
+-- web.MenuItems (14 dòng)
+SET IDENTITY_INSERT [web].[MenuItems] ON;
+INSERT INTO [web].[MenuItems] ([Id], [MenuId], [ParentId], [Label], [Url], [SortOrder], [OpenNewTab]) VALUES
+(7, 2, NULL, N'Giới thiệu', '/pages/gioi-thieu', 10, 0),
+(8, 2, NULL, N'Chính sách đổi trả', '/pages/chinh-sach-doi-tra', 20, 0),
+(9, 2, NULL, N'Hướng dẫn chọn size', '/pages/huong-dan-chon-size', 30, 0),
+(10, 2, NULL, N'Chính sách giao hàng', '/pages/chinh-sach-giao-hang', 40, 0),
+(11, 1, NULL, N'Trang chủ', '/', 10, 0),
+(12, 1, NULL, N'Sản phẩm', '/san-pham', 20, 0),
+(13, 1, NULL, N'Áo thun', '/san-pham?category=ao-thun', 30, 0),
+(14, 1, NULL, N'Giày sneaker', '/san-pham?category=giay-sneaker', 40, 0),
+(15, 1, NULL, N'Blog', '/blog', 50, 0),
+(16, 1, NULL, N'Liên hệ', '/lien-he', 60, 0),
+(17, 3, NULL, N'Trang chủ', '/', 10, 0),
+(18, 3, NULL, N'Tất cả giày', '/san-pham', 20, 0),
+(19, 3, NULL, N'Liên hệ', '/lien-he', 30, 0),
+(20, 4, NULL, N'Chính sách đổi trả', '/pages/chinh-sach-doi-tra', 10, 0)
+;
+SET IDENTITY_INSERT [web].[MenuItems] OFF;
+GO
+
+-- web.Menus (4 dòng)
+SET IDENTITY_INSERT [web].[Menus] ON;
+INSERT INTO [web].[Menus] ([Id], [SiteId], [Code]) VALUES
+(2, 1, 'footer'),
+(1, 1, 'header'),
+(4, 2, 'footer'),
+(3, 2, 'header')
+;
+SET IDENTITY_INSERT [web].[Menus] OFF;
+GO
+
+-- web.Pages (5 dòng)
+SET IDENTITY_INSERT [web].[Pages] ON;
+INSERT INTO [web].[Pages] ([Id], [SiteId], [Slug], [Title], [Content], [MetaTitle], [MetaDescription], [IsPublished], [PublishedAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
+(1, 1, 'gioi-thieu', N'Giới thiệu MyStyle', N'MyStyle là thương hiệu thời trang Việt dành cho người trẻ đi làm và đi chơi. Chúng tôi chọn chất liệu thoáng mát, phom dáng dễ mặc, giá hợp lý.
+
+Cửa hàng: 123 Lê Lợi, Quận 1 - mở cửa 8:30 đến 22:00 hằng ngày. Sắp khai trương chi nhánh Quận 7.', NULL, N'MyStyle - thời trang nam nữ, giày dép, phụ kiện. Mặc đẹp mỗi ngày.', 1, '2026-10-27T03:09:29.2720000', '2026-10-22T03:09:29.2720000', 1, NULL, NULL, 0),
+(2, 1, 'chinh-sach-doi-tra', N'Chính sách đổi trả', N'- Đổi size, đổi mẫu trong 7 ngày kể từ ngày nhận hàng, sản phẩm còn tem mác, chưa giặt.
+- Hoàn tiền 100% nếu sản phẩm lỗi do nhà sản xuất.
+- Sản phẩm giảm giá trên 50% không áp dụng đổi trả.
+- Mang hóa đơn hoặc báo số điện thoại khi mua để tra đơn.', NULL, N'Đổi trả trong 7 ngày, hoàn tiền nếu lỗi sản xuất.', 1, '2026-10-27T03:09:29.2720000', '2026-10-22T03:09:29.2720000', 1, NULL, NULL, 0),
+(3, 1, 'huong-dan-chon-size', N'Hướng dẫn chọn size', N'Áo: S (45-52kg), M (52-60kg), L (60-68kg), XL (68-76kg), XXL (76-85kg).
+Quần jeans: chọn theo số đo vòng eo, size 28 tương đương eo 71cm, mỗi size tăng 2,5cm.
+Giày: đo chiều dài bàn chân, cộng thêm 1cm rồi đối chiếu bảng size 36-44.', NULL, N'Bảng size áo, quần, giày MyStyle.', 1, '2026-10-27T03:09:29.2720000', '2026-10-22T03:09:29.2720000', 1, NULL, NULL, 0),
+(4, 1, 'chinh-sach-giao-hang', N'Chính sách giao hàng', N'Giao toàn quốc qua GHN, GHTK, Viettel Post. Nội thành TP.HCM 1-2 ngày, tỉnh khác 2-4 ngày.
+Miễn phí giao hàng cho đơn từ 300.000đ (mã FREESHIP300). Được kiểm tra hàng trước khi nhận.', NULL, N'Giao toàn quốc, miễn phí ship đơn từ 300k.', 0, NULL, '2026-11-16T03:09:29.2720000', 1, NULL, NULL, 0),
+(5, 2, 'chinh-sach-doi-tra', N'Chính sách đổi trả giày', N'Đổi size miễn phí trong 7 ngày nếu giày chưa qua sử dụng, còn hộp và tem. Lỗi keo, lỗi đế: bảo hành 3 tháng.', NULL, NULL, 1, '2026-11-21T06:45:32.2340000', '2026-11-21T06:45:32.2340000', NULL, NULL, NULL, 0)
+;
+SET IDENTITY_INSERT [web].[Pages] OFF;
+GO
+
+-- web.PostCategories (3 dòng)
+SET IDENTITY_INSERT [web].[PostCategories] ON;
+INSERT INTO [web].[PostCategories] ([Id], [SiteId], [ParentId], [Slug], [Name]) VALUES
+(1, 1, NULL, 'phoi-do', N'Phối đồ'),
+(2, 1, NULL, 'xu-huong', N'Xu hướng'),
+(3, 1, NULL, 'tin-cua-hang', N'Tin cửa hàng')
+;
+SET IDENTITY_INSERT [web].[PostCategories] OFF;
+GO
+
+-- web.Posts (6 dòng)
+SET IDENTITY_INSERT [web].[Posts] ON;
+INSERT INTO [web].[Posts] ([Id], [SiteId], [CategoryId], [Slug], [Title], [Summary], [Content], [ThumbnailUrl], [AuthorUserId], [MetaTitle], [MetaDescription], [IsPublished], [PublishedAt], [ViewCount], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
+(1, 1, 1, '5-cach-phoi-ao-thun-basic-di-lam', N'5 cách phối áo thun basic đi làm vẫn lịch sự', N'Áo thun basic không chỉ để mặc ở nhà. Phối cùng blazer, quần kaki hay chân váy chữ A là đủ chỉn chu đi làm.', N'1. Áo thun trắng + blazer + quần kaki.
+2. Áo thun đen + chân váy chữ A + giày cao gót.
+3. Áo thun + sơ mi khoác ngoài.
+4. Áo thun sơ vin + quần jeans slim fit + giày tây.
+5. Áo thun + áo khoác bomber cho ngày se lạnh.', NULL, 7, NULL, NULL, 1, '2026-10-31T03:09:29.2720000', 1840, '2026-10-30T03:09:29.2720000', 7, NULL, NULL, 0),
+(2, 1, 2, 'xu-huong-mau-sac-tet-2027', N'Xu hướng màu sắc Tết 2027: đỏ đô, kem và xanh rêu', N'Ba gam màu được dự báo lên ngôi mùa Tết năm nay và cách chọn đồ hợp tông da.', N'Đỏ đô sang trọng hơn đỏ tươi, dễ phối với kem và đen. Xanh rêu hợp với người da ngăm. Kem là màu nền an toàn cho mọi outfit.', NULL, 7, NULL, NULL, 1, '2026-11-12T03:09:29.2720000', 960, '2026-11-11T03:09:29.2720000', 7, NULL, NULL, 0),
+(3, 1, 1, 'chon-giay-sneaker-trang', N'Chọn giày sneaker trắng sao cho bền đẹp', N'Mẹo chọn size, chất liệu và vệ sinh giày sneaker trắng luôn như mới.', N'Chọn da tổng hợp phủ PU dễ lau chùi. Vệ sinh bằng khăn ẩm sau mỗi lần đi, tránh phơi nắng gắt. Dùng giấy báo nhét giày để giữ form.', NULL, 5, NULL, NULL, 1, '2026-11-06T03:09:29.2720000', 1210, '2026-11-05T03:09:29.2720000', 5, NULL, NULL, 0),
+(4, 1, 3, 'black-friday-giam-den-50', N'Black Friday: giảm đến 50% toàn bộ cửa hàng', N'Nhập mã BLACKFRIDAY giảm thêm khi mua online, áp dụng cả tại cửa hàng Lê Lợi.', N'Thời gian: từ thứ 6 đến hết chủ nhật. Áp dụng cho đơn từ 500.000đ. Mỗi khách dùng mã 1 lần.', NULL, 7, NULL, NULL, 1, '2026-11-17T03:09:29.2720000', 2350, '2026-11-16T03:09:29.2720000', 7, NULL, NULL, 0),
+(5, 1, 3, 'sap-khai-truong-chi-nhanh-quan-7', N'Sắp khai trương chi nhánh Quận 7', N'MyStyle mở thêm cửa hàng tại 45 Nguyễn Thị Thập, Quận 7. Nhiều quà tặng dịp khai trương.', N'Ngày khai trương dự kiến giữa tháng 12. 100 khách đầu tiên nhận túi tote MyStyle. Theo dõi fanpage để cập nhật.', NULL, 2, NULL, NULL, 1, '2026-11-19T03:09:29.2720000', 430, '2026-11-18T03:09:29.2720000', 2, NULL, NULL, 0),
+(6, 1, 1, 'lookbook-tet-2027', N'Lookbook Tết 2027 (bản nháp)', N'40 outfit cho Tết - đang chụp, sẽ đăng sau khi retouch xong.', NULL, NULL, 5, NULL, NULL, 0, NULL, 0, '2026-11-20T03:09:29.2720000', 5, NULL, NULL, 0)
+;
+SET IDENTITY_INSERT [web].[Posts] OFF;
+GO
+
+-- web.SiteProducts (19 dòng)
+INSERT INTO [web].[SiteProducts] ([SiteId], [ModelId], [PriceOverride], [IsFeatured], [SortOrder], [AddedAt]) VALUES
+(1, 1, NULL, 1, 1, '2026-11-21T06:31:24.0200000'),
+(1, 2, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 3, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 4, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 5, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 6, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 7, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 10, NULL, 1, 3, '2026-11-21T06:31:24.0200000'),
+(1, 11, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 12, NULL, 1, 4, '2026-11-21T06:31:24.0200000'),
+(1, 13, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 14, NULL, 1, 2, '2026-11-21T06:31:24.0200000'),
+(1, 15, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 17, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(1, 18, NULL, 0, 0, '2026-11-21T06:31:24.0200000'),
+(2, 14, 549000.00, 1, 0, '2026-11-21T06:45:32.2340000'),
+(2, 15, NULL, 1, 0, '2026-11-21T06:45:32.2340000'),
+(2, 16, NULL, 0, 0, '2026-11-21T06:45:32.2340000'),
+(2, 17, NULL, 0, 0, '2026-11-21T06:45:32.2340000')
+;
+GO
+
+-- web.Sites (2 dòng)
+SET IDENTITY_INSERT [web].[Sites] ON;
+INSERT INTO [web].[Sites] ([Id], [CompanyId], [Name], [Domain], [DefaultLanguage], [LogoUrl], [FaviconUrl], [PriceListId], [WarehouseId], [Settings], [IsActive], [ApiKeyHash], [ApiKeyPrefix], [ApiKeyCreatedAt], [RevalidateUrl], [RevalidateSecret], [LastSyncAt], [LastSyncStatus], [BotUserId]) VALUES
+(1, 1, N'MyStyle Fashion', 'mystyle.vn', 'vi', NULL, NULL, NULL, 1, N'{"slogan":"Mặc đẹp mỗi ngày","hotline":"0909 123 456","email":"cskh@mystyle.vn","address":"123 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM","openingHours":"8:30 - 22:00 hằng ngày","facebook":"https://facebook.com/mystyle.vn","instagram":"https://instagram.com/mystyle.vn","tiktok":"https://tiktok.com/@mystyle.vn","zalo":"0909123456","primaryColor":"#D4537E","shippingFee":30000,"freeShippingFrom":500000}', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 10),
+(2, 1, N'MyStyle Sneaker', 'sneaker.mystyle.vn', 'vi', NULL, NULL, NULL, 1, N'{"slogan":"Giày đẹp cho mọi bước chân","hotline":"0909 123 456","email":"sneaker@mystyle.vn","address":"123 Lê Lợi, Quận 1, TP.HCM","openingHours":"9:00 - 22:00","primaryColor":"#185FA5","shippingFee":25000,"freeShippingFrom":800000}', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 10)
+;
+SET IDENTITY_INSERT [web].[Sites] OFF;
 GO
 
 EXEC sp_MSforeachtable N'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT ALL; ALTER TABLE ? ENABLE TRIGGER ALL;';

@@ -12,6 +12,10 @@ using MyERP.Api.Models.Entities.Support;
 using MyERP.Api.Models.Entities.Hr;
 using MyERP.Api.Models.Entities.Marketing;
 using MyERP.Api.Models.Entities.Sales;
+using MyERP.Api.Models.Entities.Projects;
+using MyERP.Api.Models.Entities.Documents;
+using MyERP.Api.Models.Entities.Chat;
+using MyERP.Api.Models.Entities.Website;
 using MyERP.Api.Services.Common;
 
 namespace MyERP.Api.Data;
@@ -94,6 +98,29 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<OrderPromotion> OrderPromotions => Set<OrderPromotion>();
     public DbSet<Sequence> Sequences => Set<Sequence>();
     public DbSet<Setting> Settings => Set<Setting>();
+
+    // Dự án & công việc, tài liệu, chat nội bộ, website
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
+    public DbSet<TaskStage> TaskStages => Set<TaskStage>();
+    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<TaskChecklistItem> TaskChecklistItems => Set<TaskChecklistItem>();
+    public DbSet<Timesheet> Timesheets => Set<Timesheet>();
+    public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<Folder> Folders => Set<Folder>();
+    public DbSet<Document> Documents => Set<Document>();
+    public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
+    public DbSet<Channel> Channels => Set<Channel>();
+    public DbSet<ChannelMember> ChannelMembers => Set<ChannelMember>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<Site> Sites => Set<Site>();
+    public DbSet<WebPage> WebPages => Set<WebPage>();
+    public DbSet<PostCategory> PostCategories => Set<PostCategory>();
+    public DbSet<Post> Posts => Set<Post>();
+    public DbSet<Menu> Menus => Set<Menu>();
+    public DbSet<ContactSubmission> ContactSubmissions => Set<ContactSubmission>();
+    public DbSet<SiteProduct> SiteProducts => Set<SiteProduct>();
+    public DbSet<WebCart> WebCarts => Set<WebCart>();
 
     // ----- crm -----
     public DbSet<Lead> Leads => Set<Lead>();

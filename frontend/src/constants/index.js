@@ -238,3 +238,31 @@ export const SEGMENTS = [
   { value: 'at_risk', label: 'Lâu không mua', hint: 'Mua từ 2 lần, hơn 15 ngày chưa quay lại', icon: 'alert-triangle' },
   { value: 'one_time', label: 'Mua 1 lần', hint: 'Mua 1 lần đã lâu', icon: 'user' },
 ]
+
+// ===================== ĐỢT 4: Dự án, Tài liệu, Chat, Website =====================
+export const PHASE4_PERMISSIONS = {
+  PROJECT_VIEW: 'project.view', PROJECT_CREATE: 'project.create', PROJECT_EDIT: 'project.edit', PROJECT_DELETE: 'project.delete',
+  DOCUMENT_VIEW: 'document.view', DOCUMENT_CREATE: 'document.create', DOCUMENT_EDIT: 'document.edit', DOCUMENT_DELETE: 'document.delete',
+  CHAT_VIEW: 'chat.view', CHAT_CREATE: 'chat.create',
+  WEBSITE_VIEW: 'website.view', WEBSITE_CREATE: 'website.create', WEBSITE_EDIT: 'website.edit', WEBSITE_DELETE: 'website.delete',
+}
+
+export const PROJECT_STATUSES = [
+  { value: 'planning', label: 'Lên kế hoạch', css: 'draft' },
+  { value: 'active', label: 'Đang thực hiện', css: 'confirmed' },
+  { value: 'on_hold', label: 'Tạm dừng', css: 'warn' },
+  { value: 'completed', label: 'Hoàn thành', css: 'completed' },
+  { value: 'cancelled', label: 'Đã hủy', css: 'cancelled' },
+]
+export const projectStatus = (v) => PROJECT_STATUSES.find((s) => s.value === v) ?? { value: v, label: v, css: '' }
+
+export const TASK_PRIORITIES = [
+  { value: 'urgent', label: 'Khẩn cấp', css: 'cancelled', icon: 'flame' },
+  { value: 'high', label: 'Cao', css: 'warn', icon: 'arrow-up' },
+  { value: 'normal', label: 'Bình thường', css: 'draft', icon: 'minus' },
+  { value: 'low', label: 'Thấp', css: 'draft', icon: 'arrow-down' },
+]
+export const taskPriority = (v) => TASK_PRIORITIES.find((p) => p.value === v) ?? TASK_PRIORITIES[2]
+
+export const DOCUMENT_STATUS_CSS = { draft: 'draft', pending_signature: 'warn', signed: 'confirmed', active: 'completed', expired: 'cancelled', archived: 'draft' }
+export const DOCUMENT_TYPE_ICONS = { contract: 'file-certificate', policy: 'gavel', process: 'route', form: 'forms', report: 'report-analytics', other: 'file' }

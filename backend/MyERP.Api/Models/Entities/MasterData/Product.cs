@@ -35,6 +35,8 @@ public sealed class ProductModel : AuditableEntity, ICompanyOwned
     public string? Material { get; private set; }
     public string? Season { get; private set; }
     public string? Description { get; private set; }
+    /// <summary>Ảnh đại diện mẫu (URL) - hiện trên website.</summary>
+    public string? ImageUrl { get; private set; }
     public bool IsActive { get; private set; }
 
     public List<Product> Variants { get; private set; } = [];
@@ -136,8 +138,17 @@ public sealed class Product : AuditableEntity, ICompanyOwned
     public bool IsPurchasable { get; private set; }
     public bool IsStockTracked { get; private set; }
     public bool IsActive { get; private set; }
+    /// <summary>Hiện trên website bán hàng (app Website bật / tắt theo mẫu).</summary>
+    public bool IsPublishedWeb { get; private set; }
+    public string? WebSlug { get; private set; }
 
     public ProductModel? Model { get; private set; }
+
+    public void SetWebPublish(bool published, string? slug)
+    {
+        IsPublishedWeb = published;
+        if (slug is not null) WebSlug = slug;
+    }
 
     internal static Product CreateVariant(ProductModel model, string? color, string? size)
     {

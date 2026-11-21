@@ -164,8 +164,14 @@ public sealed record TopProduct(long ModelId, string Code, string Name, decimal 
 
 public sealed record LowStockItem(long ProductId, string Code, string Name, decimal OnHand, decimal MinStock);
 
+/// <summary>Granularity: day | week | month - mỗi cột RevenueByDay là 1 ngày / tuần / tháng (Date = ngày đầu cột).</summary>
 public sealed record Dashboard(
     int Days,
+    DateOnly From,
+    DateOnly To,
+    DateOnly PreviousFrom,
+    DateOnly PreviousTo,
+    string Granularity,
     KpiValue Revenue,
     KpiValue GrossProfit,
     KpiValue Orders,

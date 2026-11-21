@@ -1,12 +1,34 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getErrorMessage } from '../../api/client'
 import { reportApi } from '../../api/retailApi'
 import { RETAIL_PERMISSIONS } from '../../constants'
 import { useAuth } from '../../context/AuthContext'
-import { formatDateOnly, formatMoney, formatMoneyShort, formatQty } from '../../utils/format'
+import { formatDateOnly, formatMoney, formatMoneyShort, formatQty, todayIso } from '../../utils/format'
 
-const PERIODS = [{ days: 7, label: '7 ngày' }, { days: 30, label: '30 ngày' }, { days: 90, label: '90 ngày' }]
+// ----- Kỳ báo cáo (ngày theo giờ máy, dạng yyyy-MM-dd, tính cả 2 đầu) -----
+const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const addDays = (isoDate, n) => { const d = new Date(`${isoDate}T00:00:00`); d.setDate(d.getDate() + n); return iso(d) }
+const PRESETS = [
+  { key: 'today', label: 'Hôm nay', range: (t) => [t, t] },
+  { key: '7d', label: '7 ngày', range: (t) => [addDays(t, -6), t] },
+  { key: '30d', label: '30 ngày', range: (t) => [addDays(t, -29), t] },
+  { key: 'month', label: 'Tháng này', range: (t) => [`${t.slice(0, 8)}01`, t] },
+  { key: 'last_month', label: 'Tháng trước', range: (t) => { const end = addDays(`${t.slice(0, 8)}01`, -1); return [`${end.slice(0, 8)}01`, end] } },
+  { key: '90d', label: '90 ngày', range: (t) => [addDays(t, -89), t] },
+  { key: 'year', label: 'Năm nay', range: (t) => [`${t.slice(0, 4)}-01-01`, t] },
+]
+const MAX_DAYS = 732
+const dayCount = (from, to) => Math.round((new Date(`${to}T00:00:00`) - new Date(`${from}T00:00:00`)) / 86400000) + 1
+
+/** Nhãn 1 cột biểu đồ theo kiểu gom: ngày "21/11/2026", tuần "Tuần từ 16/11/2026", tháng "11/2026". short = nhãn trục ngắn. */
+function bucketLabel(date, granularity, short = false) {
+  const full = formatDateOnly(date)
+  if (granularity === 'month') return full.slice(3)
+  if (granularity === 'week') return short ? full.slice(0, 5) : `Tuần từ ${full}`
+  return short ? full.slice(0, 5) : full
+}
+const BUCKET_TITLE = { day: 'Doanh thu theo ngày', week: 'Doanh thu theo tuần', month: 'Doanh thu theo tháng' }
 /** API trả tên trạng thái tiếng Việt (ReportService.statusNames) → màu nhãn */
 const STATUS_CSS = { 'Nháp': 'draft', 'Đã xác nhận': 'confirmed', 'Hoàn thành': 'completed', 'Đã hủy': 'cancelled' }
 
@@ -29,7 +51,7 @@ function Kpi({ label, kpi, money = true, hint }) {
 }
 
 /** Cột doanh thu theo ngày (1 chuỗi, 1 màu). Rê chuột: tooltip ngày / doanh thu / lãi / số đơn. */
-function RevenueChart({ data }) {
+function RevenueChart({ data, granularity }) {
   const [hover, setHover] = useState(null)
   const max = Math.max(...data.map((d) => d.revenue), 1)
   const step = max > 0 ? niceStep(max / 4) : 1
@@ -51,15 +73,15 @@ function RevenueChart({ data }) {
           {data.map((d, i) => (
             <div key={d.date} className={`bar-col${hover === i ? ' on' : ''}`} onMouseEnter={() => setHover(i)}
               tabIndex={0} onFocus={() => setHover(i)} onBlur={() => setHover(null)}
-              aria-label={`${formatDateOnly(d.date)}: ${formatMoney(Math.round(d.revenue))}, ${d.orders} đơn`}>
+              aria-label={`${bucketLabel(d.date, granularity)}: ${formatMoney(Math.round(d.revenue))}, ${d.orders} đơn`}>
               <div className="bar" style={{ height: `${(d.revenue / top) * 100}%` }} />
-              <span className="bar-label">{i % labelEvery === 0 ? formatDateOnly(d.date).slice(0, 5) : ''}</span>
+              <span className="bar-label">{i % labelEvery === 0 ? bucketLabel(d.date, granularity, true) : ''}</span>
             </div>
           ))}
         </div>
         {hover !== null && data[hover] && (
           <div className="chart-tip" style={{ left: `${((hover + 0.5) / data.length) * 100}%` }}>
-            <b>{formatDateOnly(data[hover].date)}</b>
+            <b>{bucketLabel(data[hover].date, granularity)}</b>
             <div>Doanh thu: {formatMoney(Math.round(data[hover].revenue))}</div>
             <div>Lãi gộp: {formatMoney(Math.round(data[hover].grossProfit))}</div>
             <div>{data[hover].orders} đơn</div>
@@ -99,15 +121,28 @@ function HBars({ items, total }) {
 /** Tổng quan kinh doanh: doanh thu, lãi gộp, đơn hàng, kênh bán, nhóm hàng, sản phẩm bán chạy, hàng sắp hết. */
 export default function DashboardPage() {
   const { can } = useAuth()
-  const [days, setDays] = useState(30)
+  const [params, setParams] = useSearchParams()
+  const today = todayIso()
+  // Kỳ đang xem nằm trên URL (?from=&to=): tải lại trang / gửi link vẫn đúng kỳ. Mặc định 30 ngày gần nhất.
+  const [defFrom, defTo] = PRESETS[2].range(today)
+  const from = params.get('from') || defFrom
+  const to = params.get('to') || defTo
+  const preset = PRESETS.find((p) => { const [f, t] = p.range(today); return f === from && t === to })?.key ?? 'custom'
+  const [custom, setCustom] = useState({ from, to })
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [showTable, setShowTable] = useState(false)
 
+  useEffect(() => { setCustom({ from, to }) }, [from, to])
   useEffect(() => {
     setError('')
-    reportApi.dashboard(days).then(setData).catch((err) => setError(getErrorMessage(err)))
-  }, [days])
+    reportApi.dashboard(from, to).then(setData).catch((err) => setError(getErrorMessage(err)))
+  }, [from, to])
+
+  const setRange = (f, t) => setParams({ from: f, to: t })
+  const customError = !custom.from || !custom.to ? 'Chọn đủ 2 ngày.' : custom.to < custom.from ? 'Ngày kết thúc phải sau ngày bắt đầu.'
+    : dayCount(custom.from, custom.to) > MAX_DAYS ? 'Chỉ xem tối đa 2 năm mỗi lần.' : ''
+  const applyCustom = (e) => { e.preventDefault(); if (!customError) setRange(custom.from, custom.to) }
 
   const revenueTotal = data?.revenue.value ?? 0
   const margin = revenueTotal > 0 ? Math.round((data.grossProfit.value / revenueTotal) * 100) : 0
@@ -119,12 +154,24 @@ export default function DashboardPage() {
           <h1>Báo cáo kinh doanh</h1>
           <p className="muted small kpi-line">Doanh thu = đơn đã xác nhận / hoàn thành, sau giảm giá, không tính phí giao hàng.</p>
         </div>
-        <div className="segmented no-margin" role="tablist" aria-label="Khoảng thời gian">
-          {PERIODS.map((p) => (
-            <button key={p.days} role="tab" aria-selected={days === p.days} className={days === p.days ? 'on' : ''} onClick={() => setDays(p.days)}>{p.label}</button>
+      </div>
+
+      <div className="report-period">
+        <div className="segmented no-margin" role="group" aria-label="Chọn nhanh kỳ báo cáo">
+          {PRESETS.map((p) => (
+            <button key={p.key} aria-pressed={preset === p.key} className={preset === p.key ? 'on' : ''} onClick={() => setRange(...p.range(today))}>{p.label}</button>
           ))}
         </div>
+        <form className="period-custom" onSubmit={applyCustom} aria-label="Khoảng thời gian tự chọn">
+          <label>Từ ngày<input type="date" value={custom.from} max={custom.to || undefined} onChange={(e) => setCustom({ ...custom, from: e.target.value })} /></label>
+          <label>Đến ngày<input type="date" value={custom.to} min={custom.from || undefined} onChange={(e) => setCustom({ ...custom, to: e.target.value })} /></label>
+          <button className={`btn${preset === 'custom' ? ' primary' : ''}`} disabled={!!customError || (custom.from === from && custom.to === to)} title={customError}>Xem</button>
+        </form>
       </div>
+      <p className="muted small period-note">
+        {data ? <>Đang xem <b>{formatDateOnly(data.from)} – {formatDateOnly(data.to)}</b> ({data.days} ngày) · so với kỳ trước {formatDateOnly(data.previousFrom)} – {formatDateOnly(data.previousTo)}</> : 'Đang tải...'}
+        {customError && (custom.from !== from || custom.to !== to) && <span className="error"> · {customError}</span>}
+      </p>
 
       {error && <div className="alert error">{error}</div>}
 
@@ -157,7 +204,7 @@ export default function DashboardPage() {
 
       <div className="card chart-card">
         <div className="section-head first">
-          <h2>Doanh thu theo ngày</h2>
+          <h2>{BUCKET_TITLE[data?.granularity] ?? 'Doanh thu theo ngày'}</h2>
           <button className="btn ghost" onClick={() => setShowTable(!showTable)}>
             <i className={`ti ti-${showTable ? 'chart-bar' : 'table'}`} aria-hidden="true" /> {showTable ? 'Xem biểu đồ' : 'Xem bảng'}
           </button>
@@ -165,16 +212,16 @@ export default function DashboardPage() {
         {!data ? <p className="muted">Đang tải...</p> : showTable ? (
           <div className="table-wrap scroll-y">
             <table className="grid">
-              <thead><tr><th>Ngày</th><th className="num">Số đơn</th><th className="num">Doanh thu</th><th className="num">Lãi gộp</th></tr></thead>
+              <thead><tr><th>{data.granularity === 'month' ? 'Tháng' : data.granularity === 'week' ? 'Tuần' : 'Ngày'}</th><th className="num">Số đơn</th><th className="num">Doanh thu</th><th className="num">Lãi gộp</th></tr></thead>
               <tbody>
                 {data.revenueByDay.slice().reverse().map((d) => (
-                  <tr key={d.date}><td>{formatDateOnly(d.date)}</td><td className="num">{d.orders}</td>
+                  <tr key={d.date}><td>{bucketLabel(d.date, data.granularity)}</td><td className="num">{d.orders}</td>
                     <td className="num">{formatMoney(Math.round(d.revenue))}</td><td className="num">{formatMoney(Math.round(d.grossProfit))}</td></tr>
                 ))}
               </tbody>
             </table>
           </div>
-        ) : <RevenueChart data={data.revenueByDay} />}
+        ) : <RevenueChart data={data.revenueByDay} granularity={data.granularity} />}
       </div>
 
       <div className="two-col">

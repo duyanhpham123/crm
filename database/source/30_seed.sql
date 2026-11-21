@@ -139,6 +139,12 @@ INSERT @Grants VALUES
  ('employee',  'document',   'view,create,edit',               'own'),
  ('employee',  'project',    'view,create,edit',               'own');
 
+/* Mọi phòng ban đều dùng Chat nội bộ, Tài liệu, Dự án & công việc (phạm vi: việc / tài liệu của mình) */
+INSERT @Grants
+SELECT r.RoleCode, a.AppCode, CASE WHEN r.RoleCode = 'director' THEN 'create,edit' ELSE 'view,create,edit' END, 'own'
+FROM (VALUES ('director'),('sales'),('sales_lead'),('accountant'),('warehouse'),('purchaser'),('hr'),('marketing'),('support')) r(RoleCode)
+CROSS JOIN (VALUES ('chat'),('document'),('project')) a(AppCode);
+
 INSERT core.RolePermissions (RoleId, PermissionId, DataScope)
 SELECT DISTINCT r.Id, p.Id, g.Scope
 FROM @Grants g

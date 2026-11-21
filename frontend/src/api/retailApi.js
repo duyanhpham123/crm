@@ -74,6 +74,6 @@ export const purchasingApi = {
 }
 
 export const reportApi = {
-  /** GET /api/reports/dashboard?days=30 */
-  dashboard: (days = 30) => api.get('/api/reports/dashboard', { params: { days } }).then(data),
+  /** GET /api/reports/dashboard?from=2026-11-01&to=2026-11-21 (ngày dạng yyyy-MM-dd, tính cả 2 đầu) */
+  dashboard: (from, to) => api.get('/api/reports/dashboard', { params: { from, to } }).then(data),
 }
