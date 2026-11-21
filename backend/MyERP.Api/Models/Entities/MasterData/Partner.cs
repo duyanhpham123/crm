@@ -58,6 +58,13 @@ public sealed class Partner : AuditableEntity, ICompanyOwned
         return partner;
     }
 
+    public static Partner CreateSupplier(long companyId, string code, PartnerInfo info)
+    {
+        var partner = new Partner { CompanyId = companyId, Code = code, IsSupplier = true, IsActive = true };
+        partner.Update(info);
+        return partner;
+    }
+
     public void Update(PartnerInfo d)
     {
         PartnerType = d.PartnerType == Individual ? Individual : Company;

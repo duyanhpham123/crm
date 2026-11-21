@@ -21,6 +21,84 @@ public static class Permissions
         public const string Delete = "users.delete";
     }
 
+    public static class Inventory
+    {
+        public const string View = "inventory.view";
+        public const string Create = "inventory.create";
+        public const string Edit = "inventory.edit";
+        public const string Delete = "inventory.delete";
+    }
+
+    public static class Orders
+    {
+        public const string View = "order.view";
+        public const string Create = "order.create";
+        public const string Edit = "order.edit";
+        public const string Approve = "order.approve";
+    }
+
+    public static class Purchasing
+    {
+        public const string View = "purchasing.view";
+        public const string Create = "purchasing.create";
+        public const string Edit = "purchasing.edit";
+        public const string Approve = "purchasing.approve";
+    }
+
+    public static class Reports
+    {
+        public const string View = "report.view";
+    }
+
+    public static class Quotations
+    {
+        public const string View = "quotation.view";
+        public const string Create = "quotation.create";
+        public const string Edit = "quotation.edit";
+    }
+
+    public static class Logistics
+    {
+        public const string View = "logistics.view";
+        public const string Create = "logistics.create";
+        public const string Edit = "logistics.edit";
+    }
+
+    public static class Accounting
+    {
+        public const string View = "accounting.view";
+        public const string Create = "accounting.create";
+        public const string Edit = "accounting.edit";
+    }
+
+    public static class Hr
+    {
+        public const string View = "hr.view";
+        public const string Create = "hr.create";
+        public const string Edit = "hr.edit";
+        public const string Approve = "hr.approve";
+    }
+
+    public static class Marketing
+    {
+        public const string View = "marketing.view";
+        public const string Create = "marketing.create";
+        public const string Edit = "marketing.edit";
+    }
+
+    public static class Settings
+    {
+        public const string View = "settings.view";
+        public const string Edit = "settings.edit";
+    }
+
+    public static class Support
+    {
+        public const string View = "support.view";
+        public const string Create = "support.create";
+        public const string Edit = "support.edit";
+    }
+
     /// <summary>Các hành động chuẩn của mọi ứng dụng (cột trong ma trận phân quyền).</summary>
     public static readonly IReadOnlyList<string> StandardActions = ["view", "create", "edit", "delete", "approve", "export"];
 

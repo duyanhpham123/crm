@@ -12,6 +12,24 @@ import OpportunitiesPage from './pages/crm/OpportunitiesPage'
 import UsersPage from './pages/users/UsersPage'
 import RolesPage from './pages/users/RolesPage'
 import RoleEditorPage from './pages/users/RoleEditorPage'
+import ProductsPage from './pages/inventory/ProductsPage'
+import ProductDetailPage from './pages/inventory/ProductDetailPage'
+import StockPage from './pages/inventory/StockPage'
+import StockDocumentsPage from './pages/inventory/StockDocumentsPage'
+import OrdersPage from './pages/orders/OrdersPage'
+import OrderFormPage from './pages/orders/OrderFormPage'
+import PurchaseOrdersPage from './pages/purchasing/PurchaseOrdersPage'
+import PurchaseFormPage from './pages/purchasing/PurchaseFormPage'
+import SuppliersPage from './pages/purchasing/SuppliersPage'
+import DashboardPage from './pages/reports/DashboardPage'
+import QuotationsPage from './pages/quotations/QuotationsPage'
+import QuotationFormPage from './pages/quotations/QuotationFormPage'
+import { CodPage, ReadyOrdersPage, ShipmentsPage } from './pages/logistics/LogisticsPages'
+import { AccountingOverviewPage, CashBookPage, DebtsPage, VouchersPage } from './pages/accounting/AccountingPages'
+import { TicketDetailPage, TicketsPage } from './pages/support/SupportPages'
+import { AttendancePage, EmployeesPage, LeavesPage, PayrollDetailPage, PayrollListPage } from './pages/hr/HrPages'
+import { CampaignDetailPage, CampaignsPage, PromotionsPage, SegmentsPage } from './pages/marketing/MarketingPages'
+import { AppsSettingsPage, CompanySettingsPage, DepartmentsPage, NumberingPage, WarehousesPage } from './pages/settings/SettingsPages'
 
 /**
  * Bảng định tuyến của ứng dụng.
@@ -40,7 +58,70 @@ export default function App() {
           <Route path="users/roles/new" element={<RoleEditorPage />} />
           <Route path="users/roles/:id" element={<RoleEditorPage />} />
 
-          {/* Ứng dụng chưa làm: /quotations, /orders, /inventory ... */}
+          {/* Kho */}
+          <Route path="inventory" element={<Navigate to="/inventory/products" replace />} />
+          <Route path="inventory/products" element={<ProductsPage />} />
+          <Route path="inventory/products/:id" element={<ProductDetailPage />} />
+          <Route path="inventory/stock" element={<StockPage />} />
+          <Route path="inventory/documents" element={<StockDocumentsPage />} />
+
+          {/* Đơn hàng */}
+          <Route path="orders" element={<OrdersPage />} />
+          <Route path="orders/new" element={<OrderFormPage />} />
+          <Route path="orders/:id" element={<OrderFormPage />} />
+
+          {/* Mua hàng */}
+          <Route path="purchasing" element={<Navigate to="/purchasing/orders" replace />} />
+          <Route path="purchasing/orders" element={<PurchaseOrdersPage />} />
+          <Route path="purchasing/orders/new" element={<PurchaseFormPage />} />
+          <Route path="purchasing/orders/:id" element={<PurchaseFormPage />} />
+          <Route path="purchasing/suppliers" element={<SuppliersPage />} />
+
+          {/* Báo cáo */}
+          <Route path="reports" element={<DashboardPage />} />
+
+          {/* Báo giá */}
+          <Route path="quotations" element={<QuotationsPage />} />
+          <Route path="quotations/new" element={<QuotationFormPage />} />
+          <Route path="quotations/:id" element={<QuotationFormPage />} />
+
+          {/* Vận chuyển */}
+          <Route path="logistics" element={<ShipmentsPage />} />
+          <Route path="logistics/ready" element={<ReadyOrdersPage />} />
+          <Route path="logistics/cod" element={<CodPage />} />
+
+          {/* Kế toán */}
+          <Route path="accounting" element={<AccountingOverviewPage />} />
+          <Route path="accounting/vouchers" element={<VouchersPage />} />
+          <Route path="accounting/cashbook" element={<CashBookPage />} />
+          <Route path="accounting/receivables" element={<DebtsPage kind="receivable" />} />
+          <Route path="accounting/payables" element={<DebtsPage kind="payable" />} />
+
+          {/* CSKH */}
+          <Route path="support" element={<TicketsPage />} />
+          <Route path="support/:id" element={<TicketDetailPage />} />
+
+          {/* Nhân sự */}
+          <Route path="hr" element={<EmployeesPage />} />
+          <Route path="hr/attendance" element={<AttendancePage />} />
+          <Route path="hr/leaves" element={<LeavesPage />} />
+          <Route path="hr/payroll" element={<PayrollListPage />} />
+          <Route path="hr/payroll/:id" element={<PayrollDetailPage />} />
+
+          {/* Marketing */}
+          <Route path="marketing" element={<CampaignsPage />} />
+          <Route path="marketing/campaigns/:id" element={<CampaignDetailPage />} />
+          <Route path="marketing/promotions" element={<PromotionsPage />} />
+          <Route path="marketing/segments" element={<SegmentsPage />} />
+
+          {/* Cài đặt */}
+          <Route path="settings" element={<CompanySettingsPage />} />
+          <Route path="settings/departments" element={<DepartmentsPage />} />
+          <Route path="settings/warehouses" element={<WarehousesPage />} />
+          <Route path="settings/apps" element={<AppsSettingsPage />} />
+          <Route path="settings/numbering" element={<NumberingPage />} />
+
+          {/* Ứng dụng chưa làm: /website, /projects, /documents, /chat */}
           <Route path=":slug" element={<ComingSoonPage />} />
         </Route>
       </Route>

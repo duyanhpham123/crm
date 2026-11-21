@@ -3,7 +3,15 @@ using Microsoft.EntityFrameworkCore;
 using MyERP.Api.Models.Entities;
 using MyERP.Api.Models.Entities.Core;
 using MyERP.Api.Models.Entities.Crm;
+using MyERP.Api.Models.Entities.Inventory;
 using MyERP.Api.Models.Entities.MasterData;
+using MyERP.Api.Models.Entities.Purchasing;
+using MyERP.Api.Models.Entities.Accounting;
+using MyERP.Api.Models.Entities.Logistics;
+using MyERP.Api.Models.Entities.Support;
+using MyERP.Api.Models.Entities.Hr;
+using MyERP.Api.Models.Entities.Marketing;
+using MyERP.Api.Models.Entities.Sales;
 using MyERP.Api.Services.Common;
 
 namespace MyERP.Api.Data;
@@ -39,6 +47,54 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<PartnerContact> PartnerContacts => Set<PartnerContact>();
     public DbSet<PartnerGroup> PartnerGroups => Set<PartnerGroup>();
 
+    public DbSet<ProductModel> ProductModels => Set<ProductModel>();
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
+    public DbSet<Brand> Brands => Set<Brand>();
+    public DbSet<UnitOfMeasure> UnitsOfMeasure => Set<UnitOfMeasure>();
+
+    // ----- inv (kho) -----
+    public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<StockDocument> StockDocuments => Set<StockDocument>();
+    public DbSet<StockLedgerEntry> StockLedger => Set<StockLedgerEntry>();
+    public DbSet<StockBalance> StockBalances => Set<StockBalance>();
+
+    // ----- sales, pur -----
+    public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
+    public DbSet<SalesOrderLine> SalesOrderLines => Set<SalesOrderLine>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+
+    // Báo giá, trả hàng, vận chuyển, kế toán, CSKH
+    public DbSet<Quotation> Quotations => Set<Quotation>();
+    public DbSet<SalesReturn> SalesReturns => Set<SalesReturn>();
+    public DbSet<SalesReturnLine> SalesReturnLines => Set<SalesReturnLine>();
+    public DbSet<Carrier> Carriers => Set<Carrier>();
+    public DbSet<Shipment> Shipments => Set<Shipment>();
+    public DbSet<CashVoucher> CashVouchers => Set<CashVoucher>();
+    public DbSet<BankAccount> BankAccounts => Set<BankAccount>();
+    public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
+    public DbSet<Ticket> Tickets => Set<Ticket>();
+    public DbSet<TicketMessage> TicketMessages => Set<TicketMessage>();
+    public DbSet<TicketCategory> TicketCategories => Set<TicketCategory>();
+    public DbSet<SlaPolicy> SlaPolicies => Set<SlaPolicy>();
+
+    // Nhân sự, marketing, cài đặt
+    public DbSet<Position> Positions => Set<Position>();
+    public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<Contract> Contracts => Set<Contract>();
+    public DbSet<Attendance> Attendances => Set<Attendance>();
+    public DbSet<WorkShift> WorkShifts => Set<WorkShift>();
+    public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
+    public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<PayrollPeriod> PayrollPeriods => Set<PayrollPeriod>();
+    public DbSet<Payslip> Payslips => Set<Payslip>();
+    public DbSet<Campaign> Campaigns => Set<Campaign>();
+    public DbSet<Promotion> Promotions => Set<Promotion>();
+    public DbSet<OrderPromotion> OrderPromotions => Set<OrderPromotion>();
+    public DbSet<Sequence> Sequences => Set<Sequence>();
+    public DbSet<Setting> Settings => Set<Setting>();
+
     // ----- crm -----
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<LeadSource> LeadSources => Set<LeadSource>();
@@ -50,6 +106,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
     // EF tham số hóa thuộc tính của context nên giá trị được đọc lại ở mỗi truy vấn.
     private long CurrentCompanyId => currentUser.CompanyId ?? 0;
+
+    /// <summary>Mọi cột tiền / số lượng mặc định DECIMAL(18,4) - khớp DB, tránh EF cảnh báo làm tròn.</summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        => configurationBuilder.Properties<decimal>().HavePrecision(18, 4);
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

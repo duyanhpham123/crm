@@ -6,7 +6,7 @@ Hệ thống quản trị doanh nghiệp (ERP/CRM) cho tất cả phòng ban.
 |---|---|---|
 | Backend | ASP.NET Core 10 Web API, mô hình **MVC**, trả **JSON** | `backend/` |
 | Frontend | **React 19** + Vite + React Router + Axios | `frontend/` |
-| Database | SQL Server, 157 bảng, 15 schema | `database/` |
+| Database | SQL Server, 157 bảng, 15 schema | `database/MyERP.sql` |
 
 ```
 Trình duyệt ──► React (frontend/) ──HTTP JSON──► Controller ──► Service ──► AppDbContext ──► SQL Server
@@ -18,8 +18,9 @@ Trình duyệt ──► React (frontend/) ──HTTP JSON──► Controller �
 Cần: .NET SDK 10+, Node.js 20+, SQL Server (localhost, Windows Authentication).
 
 ```powershell
-# 1. Tạo database (chỉ làm 1 lần). Thêm -Demo để có sẵn 15 lead mẫu cho dùng thử
-.\database\run_all.ps1 -Demo
+# 1. Tạo database (chỉ làm 1 lần): mở database/MyERP.sql trong SSMS rồi bấm Execute (F5)
+#    hoặc:
+sqlcmd -S localhost -E -C -f 65001 -i database/MyERP.sql
 
 # 2. Chạy backend - cửa sổ terminal 1
 dotnet run --project backend/MyERP.Api --launch-profile http
@@ -33,7 +34,15 @@ npm run dev
 Mở **http://localhost:5173**. Lần đầu sẽ hiện màn hình thiết lập mật khẩu cho tài khoản `admin`.
 
 - Tài liệu API, thử API trực tiếp: http://localhost:5121/docs
-- **Database tạo trước ngày 20/11/2026** cần chạy bản nâng cấp: `sqlcmd -S localhost -E -d MyERP -I -f 65001 -i database/migrations/2026-11-20_sequence_counters.sql`
+- **Thư mục `database/`** gọn như sau:
+  - `MyERP.sql` – một file duy nhất: cấu trúc + toàn bộ dữ liệu hiện tại. Mang sang máy khác chỉ cần chạy file này.
+  - `cap-nhat-file-sql.cmd` – bấm đúp để tạo lại `MyERP.sql` từ database MyERP đang chạy (làm trước khi mang project đi / commit).
+  - `source/` – script gốc để sửa cấu trúc (`00..20`), dữ liệu khởi tạo (`30`), dữ liệu mẫu (`40..43`), `migrations/` và `run_all.ps1`.
+    Đổi cấu trúc: sửa script trong `source/` + viết migration cho DB đang chạy, rồi chạy lại `cap-nhat-file-sql.cmd`.
+  - Tạo DB sạch không có dữ liệu bán hàng: `.\database\source\run_all.ps1` (thêm `-Demo` để có dữ liệu mẫu).
+- **Database tạo từ trước** cần chạy các bản nâng cấp trong `database/source/migrations/` theo thứ tự ngày (chạy lại nhiều lần không sao), ví dụ:
+  `sqlcmd -S localhost -E -d MyERP -I -f 65001 -i database/source/migrations/2026-11-23_phase3.sql`
+- Quy tắc tính lương (giảm trừ gia cảnh, biểu thuế TNCN, tỷ lệ bảo hiểm) nằm ở `backend/MyERP.Api/Models/Entities/Hr/Payroll.cs` (`PayrollRules`) - kiểm tra lại theo quy định hiện hành trước khi trả lương thật.
 - Vite tự chuyển `/api/*` sang backend nên không cần cấu hình CORS khi dev.
 - Sửa file React thì trình duyệt tự cập nhật ngay. Sửa C# thì dừng và chạy lại backend (hoặc dùng `dotnet watch`).
 
@@ -152,6 +161,19 @@ Chỉ cần chạy một ứng dụng .NET: nó phục vụ cả API lẫn giao 
 | CRM - Lead | Danh sách, tìm không dấu, lọc, phân trang, tạo / sửa / xóa mềm, đổi trạng thái, chống trùng SĐT/email, **chuyển đổi thành khách hàng + cơ hội** |
 | CRM - Khách hàng | Doanh nghiệp / cá nhân, mã số thuế, nhóm, người phụ trách, nhiều người liên hệ (1 liên hệ chính); tìm theo tên, MST, SĐT, tên người liên hệ; hồ sơ khách hàng kèm cơ hội; chống trùng MST / SĐT |
 | CRM - Cơ hội | Bảng Kanban kéo thả theo giai đoạn (đổi được cả trong form - dùng trên điện thoại); tổng giá trị + doanh thu kỳ vọng mỗi cột; thất bại bắt buộc có lý do; quá hạn chốt tô đỏ; lưu lịch sử chuyển giai đoạn |
+| Kho - Sản phẩm | Mẫu sản phẩm + biến thể màu × size: chọn màu, bộ size (áo S–XL, quần 28–34, giày 35–43...) là sinh sẵn SKU (VD `ATB01-DEN-M`); thêm màu / size sau vẫn được; giá, mã vạch, tồn tối thiểu riêng từng SKU; bảng tồn theo màu × size tô màu hàng sắp hết |
+| Kho - Tồn & phiếu kho | Tồn từng SKU, giá vốn bình quân gia quyền, giá trị tồn, lọc hàng sắp hết. Phiếu nhập / xuất / kiểm kê thủ công; phiếu từ đơn bán, đơn nhập tự sinh và link về chứng từ gốc; không cho xuất quá tồn |
+| Đơn hàng | Bán tại quầy (để trống khách = Khách lẻ) và online (Facebook, Shopee, TikTok, Lazada, Website, Zalo...): tìm SKU kiểu "thun đen M", chiết khấu dòng, giảm giá đơn, phí ship. Nháp → Xác nhận (trừ kho, chốt giá vốn) → Hoàn thành; thu tiền nhiều lần; hủy đơn đã xuất thì hàng tự về kho; xem lãi gộp từng đơn |
+| Mua hàng | Nhà cung cấp (mã NCC tự sinh); đơn nhập Nháp → Gửi đặt hàng → Nhận hàng (tự tạo phiếu nhập, cập nhật tồn và giá vốn; chi phí vận chuyển phân bổ vào giá vốn theo giá trị dòng) |
+| Báo cáo | Doanh thu, lãi gộp, số đơn, giá trị TB/đơn so với kỳ trước (7 / 30 / 90 ngày); biểu đồ doanh thu theo ngày (xem dạng bảng được); theo kênh bán, nhóm hàng; top sản phẩm; hàng sắp hết; công nợ khách; giá trị tồn kho |
+| Trả hàng | Từ đơn đã xác nhận / hoàn thành: chọn sản phẩm, số lượng, tình trạng (còn bán được thì nhập lại kho đúng giá vốn, hỏng thì không); hoàn tiền mặt / chuyển khoản (tự tạo phiếu chi) hoặc trừ công nợ; giảm giá đơn chia đều khi trả |
+| Báo giá | Lập báo giá cho khách sỉ / doanh nghiệp, điều khoản, hạn hiệu lực (tự báo hết hạn), in / lưu PDF; sửa sau khi gửi thì tăng số lần sửa; khách đồng ý thì tự tạo đơn hàng nháp đúng giá; tỷ lệ chốt |
+| Vận chuyển | Danh sách đơn chờ giao; tạo vận đơn (GHN, GHTK, Viettel Post, J&T, SPX, shop tự giao) kèm COD, phí ship; hành trình Chờ lấy → Đã lấy → Đang giao → Đã giao (đơn tự hoàn thành) / Thất bại → Giao lại / Hoàn hàng (đơn tự hủy, hàng về kho); đối soát COD: chọn vận đơn hãng đã giao → 1 phiếu báo có + 1 phiếu chi phí ship, đơn ghi đã thu |
+| Kế toán | Phiếu thu / chi tiền mặt (PT / PC) và ngân hàng (BC / BN); thu tiền khách / trả NCC tự trừ vào đơn nợ cũ nhất; hủy phiếu thì trả lại công nợ; sổ quỹ có tồn đầu / cuối kỳ; công nợ khách hàng, nhà cung cấp; báo cáo lãi lỗ (doanh thu thuần, giá vốn, chi phí theo loại); tài khoản ngân hàng. Thu tiền ở Đơn hàng, COD, hoàn tiền trả hàng đều tự ghi sổ |
+| CSKH | Phiếu hỗ trợ / khiếu nại / bảo hành / đổi trả từ mọi kênh, gắn khách + đơn hàng; hạn phản hồi và hạn xử lý theo mức ưu tiên (SLA), báo quá hạn; trao đổi với khách + ghi chú nội bộ; giao người xử lý; đánh giá hài lòng 1-5 sao; tạo phiếu ngay từ đơn hàng |
+| Nhân sự | Hồ sơ nhân viên, hợp đồng & lương (đổi lương tự lập hợp đồng mới), gắn tài khoản đăng nhập; chấm công tháng dạng bảng (bấm ô để sửa, chấm đủ công, check-in / check-out, đi trễ, tăng ca); đơn nghỉ phép có duyệt, quỹ phép năm (duyệt thì tự chấm công "nghỉ phép"); bảng lương tháng: công thực tế, phép có lương, tăng ca 150%, BH 10,5%, thuế TNCN lũy tiến, thưởng / tạm ứng; duyệt rồi chi lương tạo phiếu chi bên Kế toán |
+| Marketing | Chiến dịch quảng cáo (Facebook, TikTok, Google...): ngân sách, chi phí / hiển thị / click / lead theo ngày, CTR, chi phí mỗi lead, doanh thu và ROAS qua mã giảm giá của chiến dịch; mã giảm giá (% có trần, số tiền, miễn phí ship; đơn tối thiểu, kênh, thời gian, số lượt) áp dụng ngay ở màn hình tạo đơn; phân nhóm khách VIP / thân thiết / mới / lâu không mua |
+| Cài đặt | Thông tin cửa hàng + chính sách đổi trả (in trên báo giá), phòng ban, kho hàng, bật / tắt ứng dụng trên màn hình chính, quy tắc đánh số chứng từ |
 | Đánh số chứng từ | Bộ đếm riêng từng kỳ - nhập chứng từ lùi ngày không bị trùng số |
 | Người dùng | Danh sách, lọc theo phòng ban / vai trò / trạng thái; tạo tài khoản (mật khẩu ban đầu có nút sinh ngẫu nhiên); sửa thông tin, phòng ban, vai trò (quyền mới có hiệu lực ngay); khóa / mở khóa (đăng xuất khỏi mọi thiết bị); đặt lại mật khẩu |
 | Đổi mật khẩu | Nút chìa khóa trên thanh trên cùng; các thiết bị khác bị đăng xuất, thiết bị hiện tại vẫn dùng tiếp |

@@ -53,3 +53,20 @@ export function initials(name = '') {
   if (parts.length === 1) return parts[0][0].toUpperCase()
   return (parts.at(-2)[0] + parts.at(-1)[0]).toUpperCase()
 }
+
+/** Số lượng: 12.0000 → "12", 1.5 → "1,5" */
+export function formatQty(value) {
+  return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(value ?? 0)
+}
+
+/** Ngày hôm nay theo giờ máy dạng "2026-11-20" (cho <input type="date"> và API DateOnly) */
+export function todayIso() {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
+/** Nhập tiền: "1.250.000" → 1250000 */
+export function parseMoney(text) {
+  const n = Number(String(text ?? '').replace(/[^\d]/g, ''))
+  return Number.isFinite(n) ? n : 0
+}

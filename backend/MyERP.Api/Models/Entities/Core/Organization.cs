@@ -8,12 +8,36 @@ public sealed class Company
     public long Id { get; private set; }
     public string Code { get; private set; } = "";
     public string Name { get; private set; } = "";
+    public string? ShortName { get; private set; }
+    public string? TaxCode { get; private set; }
+    public string? Address { get; private set; }
+    public string? Phone { get; private set; }
+    public string? Email { get; private set; }
+    public string? Website { get; private set; }
+    public string? LegalRepresentative { get; private set; }
     public bool IsActive { get; private set; }
+
+    public Common.Result Update(string name, string? shortName, string? taxCode, string? address, string? phone, string? email, string? website, string? legalRep)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return Common.Error.Validation("company.name", "Nhập tên công ty / cửa hàng.");
+        static string? C(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+        Name = name.Trim(); ShortName = C(shortName); TaxCode = C(taxCode); Address = C(address); Phone = C(phone);
+        Email = C(email); Website = C(website); LegalRepresentative = C(legalRep);
+        return Common.Result.Success();
+    }
 }
 
-/// <summary>core.Departments - phòng ban (chỉ đọc, dùng cho danh sách chọn).</summary>
+/// <summary>core.Departments - phòng ban.</summary>
 public sealed class Department : ICompanyOwned, ISoftDelete
 {
+    public static Department Create(long companyId, long? branchId, string code, string name, int sortOrder)
+        => new() { CompanyId = companyId, BranchId = branchId, Code = code.Trim().ToUpperInvariant(), Name = name.Trim(), SortOrder = sortOrder, IsActive = true };
+
+    public void Update(string name, long? parentId, int sortOrder, bool isActive)
+    {
+        Name = name.Trim(); ParentId = parentId; SortOrder = sortOrder; IsActive = isActive;
+    }
+
     public long Id { get; private set; }
     public long CompanyId { get; private set; }
     public long? BranchId { get; private set; }
@@ -152,4 +176,45 @@ public sealed class CompanyApp
     public long CompanyId { get; private set; }
     public int AppId { get; private set; }
     public bool IsEnabled { get; private set; }
+
+    public void SetEnabled(bool enabled) => IsEnabled = enabled;
+}
+
+/// <summary>core.Sequences - quy tắc đánh số chứng từ (tiền tố, mẫu ngày, số chữ số).</summary>
+public sealed class Sequence : ICompanyOwned
+{
+    private Sequence() { }
+    public long Id { get; private set; }
+    public long CompanyId { get; private set; }
+    public string Code { get; private set; } = "";
+    public string Prefix { get; private set; } = "";
+    public string? DatePattern { get; private set; }
+    public byte Padding { get; private set; }
+    public string ResetPolicy { get; private set; } = "monthly";
+
+    public Common.Result Update(string prefix, string? datePattern, byte padding)
+    {
+        var p = (prefix ?? "").Trim().ToUpperInvariant();
+        if (p.Length is < 1 or > 10 || !p.All(char.IsAsciiLetterOrDigit)) return Common.Error.Validation("sequence.prefix", "Tiền tố 1-10 ký tự chữ / số không dấu.");
+        if (datePattern is not (null or "" or "yyMM" or "yyyyMM" or "yyyy" or "yy")) return Common.Error.Validation("sequence.pattern", "Mẫu ngày không hợp lệ.");
+        if (padding is < 3 or > 8) return Common.Error.Validation("sequence.padding", "Số chữ số từ 3 đến 8.");
+        Prefix = p; DatePattern = string.IsNullOrEmpty(datePattern) ? null : datePattern; Padding = padding;
+        ResetPolicy = DatePattern switch { null => "never", "yyyy" or "yy" => "yearly", _ => "monthly" };
+        return Common.Result.Success();
+    }
+}
+
+/// <summary>core.Settings - cấu hình dạng khóa / giá trị theo công ty.</summary>
+public sealed class Setting
+{
+    private Setting() { }
+    public Setting(long companyId, string key) { CompanyId = companyId; SettingKey = key; }
+    public long Id { get; private set; }
+    public long? CompanyId { get; private set; }
+    public string SettingKey { get; private set; } = "";
+    public string? SettingValue { get; private set; }
+    public DateTime? UpdatedAt { get; private set; }
+    public long? UpdatedBy { get; private set; }
+
+    public void Set(string? value, long userId, DateTime now) { SettingValue = value; UpdatedAt = now; UpdatedBy = userId; }
 }

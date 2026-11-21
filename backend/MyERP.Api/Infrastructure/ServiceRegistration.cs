@@ -13,6 +13,16 @@ using MyERP.Api.Services.Auth;
 using MyERP.Api.Services.Common;
 using MyERP.Api.Services.Crm;
 using MyERP.Api.Services.Users;
+using MyERP.Api.Services.Inventory;
+using MyERP.Api.Services.Purchasing;
+using MyERP.Api.Services.Reports;
+using MyERP.Api.Services.Sales;
+using MyERP.Api.Services.Accounting;
+using MyERP.Api.Services.Logistics;
+using MyERP.Api.Services.Support;
+using MyERP.Api.Services.Hr;
+using MyERP.Api.Services.Marketing;
+using MyERP.Api.Services.Settings;
 
 namespace MyERP.Api.Infrastructure;
 
@@ -57,6 +67,22 @@ public static class ServiceRegistration
         services.AddScoped<ILeadService, LeadService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<IOpportunityService, OpportunityService>();
+
+        // Kho, bán hàng, mua hàng, báo cáo
+        services.AddScoped<IStockService, StockService>();
+        services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IPurchaseService, PurchaseService>();
+        services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<ICashService, CashService>();
+        services.AddScoped<IQuotationService, QuotationService>();
+        services.AddScoped<IShipmentService, ShipmentService>();
+        services.AddScoped<ITicketService, TicketService>();
+        services.AddScoped<IHrService, HrService>();
+        services.AddScoped<IPayrollService, PayrollService>();
+        services.AddScoped<IMarketingService, MarketingService>();
+        services.AddScoped<ISettingsService, SettingsService>();
 
         // Validators: tự nạp mọi lớp AbstractValidator trong thư mục Validators/
         services.AddValidatorsFromAssemblyContaining<Program>(includeInternalTypes: true);
