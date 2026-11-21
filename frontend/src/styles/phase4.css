@@ -178,3 +178,12 @@ label.person { margin: 0; flex-direction: row; }
 .copy-box { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; background: var(--surface-2); border-radius: 8px; padding: 6px 8px; }
 .copy-box code { overflow-wrap: anywhere; font-size: 13px; }
 .env-box { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: 13px; overflow-x: auto; white-space: pre; margin: 0 0 12px; }
+
+/* ----- Trợ lý AI ----- */
+.ai-page { max-width: 980px; margin: 0 auto; padding: 20px 24px; }
+.ai-page h1 i { color: var(--accent); }
+.steps { padding-left: 20px; margin: 0 0 8px; }
+.steps li { margin-bottom: 10px; }
+.examples { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.examples li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; background: var(--surface-2); border-radius: 8px; }
+@media (max-width: 760px) { .ai-page { padding: 16px; } }

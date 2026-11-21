@@ -41,6 +41,8 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseCors(ServiceRegistration.CorsPolicy);
 app.UseRateLimiter();
 app.UseAuthentication();
+// Khóa truy cập (AI) không được đụng tới người dùng / vai trò / khóa / mật khẩu
+app.UseMiddleware<MyERP.Api.Infrastructure.Authorization.ApiTokenRestrictionMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

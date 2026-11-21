@@ -66,6 +66,7 @@ public static class ServiceRegistration
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<IApiTokenService, ApiTokenService>();
 
         // Người dùng
         services.AddScoped<IUserService, UserService>();
@@ -118,7 +119,14 @@ public static class ServiceRegistration
         services.Configure<JwtOptions>(section);
         var jwt = section.Get<JwtOptions>() ?? new JwtOptions();
 
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        // Mặc định: header "Bearer erp_..." (khóa truy cập cá nhân cho AI) -> ApiToken, còn lại -> JWT đăng nhập
+        services.AddAuthentication(o =>
+            {
+                o.DefaultScheme = ApiTokenDefaults.Selector;
+                o.DefaultChallengeScheme = ApiTokenDefaults.Selector;
+            })
+            .AddPolicyScheme(ApiTokenDefaults.Selector, "JWT hoặc khóa truy cập", o => o.ForwardDefaultSelector = ApiTokenDefaults.SelectScheme)
+            .AddScheme<AuthenticationSchemeOptions, ApiTokenAuthenticationHandler>(ApiTokenDefaults.Scheme, null)
             .AddJwtBearer(o =>
             {
                 o.MapInboundClaims = false;   // giữ nguyên tên claim "sub", "company_id"

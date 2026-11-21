@@ -1,0 +1,17 @@
+{
+  "name": "myerp-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server cho MyERP: để trợ lý AI (Claude Desktop...) xem và thao tác dữ liệu ERP bằng quyền của người dùng",
+  "type": "module",
+  "bin": { "myerp-mcp": "server.js" },
+  "scripts": {
+    "start": "node server.js",
+    "check": "node test-client.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  }
+}

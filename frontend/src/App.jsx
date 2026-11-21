@@ -33,6 +33,7 @@ import { AppsSettingsPage, CompanySettingsPage, DepartmentsPage, NumberingPage, 
 import { ProjectDetailPage, ProjectsPage, TasksPage } from './pages/projects/ProjectPages'
 import { DocumentsPage } from './pages/documents/DocumentPages'
 import ChatPage from './pages/chat/ChatPage'
+import AiConnectPage from './pages/ai/AiConnectPage'
 import { WebConnectPage, WebContactsPage, WebContentPage, WebMenuPage, WebProductsPage, WebsiteOverviewPage } from './pages/website/WebsitePages'
 
 /**
@@ -132,6 +133,9 @@ export default function App() {
 
           {/* Tài liệu */}
           <Route path="documents" element={<DocumentsPage />} />
+
+          {/* Trợ lý AI: khóa truy cập + cài Claude Desktop */}
+          <Route path="ai" element={<AiConnectPage />} />
 
           {/* Chat nội bộ */}
           <Route path="chat" element={<ChatPage />} />

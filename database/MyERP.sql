@@ -1,6 +1,6 @@
 ﻿/* =====================================================================
    Database MyERP – MyERP (cấu trúc + toàn bộ dữ liệu)
-   Tạo lúc: 2026-11-21 13:51
+   Tạo lúc: 2026-11-21 14:24
 
    CÁCH DÙNG TRÊN MÁY MỚI:
      1. Mở file này trong SQL Server Management Studio (SSMS), kết nối tới SQL Server.
@@ -143,6 +143,27 @@ CREATE TABLE core.RefreshTokens (
     CONSTRAINT UQ_RefreshTokens_Hash UNIQUE (TokenHash)
 );
 CREATE INDEX IX_RefreshTokens_User ON core.RefreshTokens(UserId);
+
+/* Khóa truy cập cá nhân: cho phần mềm khác (VD trợ lý AI qua MCP) gọi API thay mặt người dùng, với đúng quyền của người đó.
+   Chỉ lưu SHA-256 của khóa; khóa gốc hiện 1 lần lúc tạo. */
+CREATE TABLE core.ApiTokens (
+    Id          BIGINT IDENTITY(1,1) NOT NULL,
+    UserId      BIGINT        NOT NULL,
+    CompanyId   BIGINT        NOT NULL,
+    Name        NVARCHAR(100) NOT NULL,
+    TokenHash   CHAR(64)      NOT NULL,
+    Prefix      VARCHAR(16)   NOT NULL,
+    CreatedAt   DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME(),
+    ExpiresAt   DATETIME2(3)  NULL,
+    LastUsedAt  DATETIME2(3)  NULL,
+    LastUsedIp  VARCHAR(45)   NULL,
+    RevokedAt   DATETIME2(3)  NULL,
+    CONSTRAINT PK_ApiTokens PRIMARY KEY (Id),
+    CONSTRAINT FK_ApiTokens_Users FOREIGN KEY (UserId) REFERENCES core.Users(Id) ON DELETE CASCADE,
+    CONSTRAINT FK_ApiTokens_Companies FOREIGN KEY (CompanyId) REFERENCES core.Companies(Id),
+    CONSTRAINT UQ_ApiTokens_Hash UNIQUE (TokenHash)
+);
+CREATE INDEX IX_ApiTokens_User ON core.ApiTokens(UserId) WHERE RevokedAt IS NULL;
 
 CREATE TABLE core.UserLogins (          -- đăng nhập ngoài: Google, Microsoft...
     LoginProvider   NVARCHAR(100) NOT NULL,
@@ -4819,7 +4840,7 @@ GO
 -- core.Users (8 dòng)
 SET IDENTITY_INSERT [core].[Users] ON;
 INSERT INTO [core].[Users] ([Id], [UserName], [NormalizedUserName], [Email], [NormalizedEmail], [EmailConfirmed], [PasswordHash], [SecurityStamp], [ConcurrencyStamp], [PhoneNumber], [PhoneNumberConfirmed], [TwoFactorEnabled], [LockoutEnd], [LockoutEnabled], [AccessFailedCount], [FullName], [AvatarUrl], [DefaultCompanyId], [Language], [IsSystemAdmin], [IsActive], [LastLoginAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [IsDeleted]) VALUES
-(1, N'admin', N'ADMIN', N'duyanh@gmail.com', N'DUYANH@GMAIL.COM', 0, N'AQAAAAIAAYagAAAAEBtb6iiRfAd5mFl4lacExqtGYg7xXth9dOrz1HtRU4Deo6jC84+Fk/VC+Waw+HF8zw==', N'92d2432a18664b9098a9951fa4357228', N'1ED543E7-8663-4AE7-B115-CC0246C04E57', NULL, 0, 0, NULL, 1, 0, N'Quản trị hệ thống', NULL, 1, 'vi', 1, 1, '2026-11-20T14:50:25.0280000', '2026-11-19T02:33:24.3780000', NULL, '2026-11-20T14:50:25.3460000', NULL, 0),
+(1, N'admin', N'ADMIN', N'duyanh@gmail.com', N'DUYANH@GMAIL.COM', 0, N'AQAAAAIAAYagAAAAEBtb6iiRfAd5mFl4lacExqtGYg7xXth9dOrz1HtRU4Deo6jC84+Fk/VC+Waw+HF8zw==', N'92d2432a18664b9098a9951fa4357228', N'1ED543E7-8663-4AE7-B115-CC0246C04E57', NULL, 0, 0, NULL, 1, 0, N'Quản trị hệ thống', NULL, 1, 'vi', 1, 1, '2026-11-21T06:57:23.4810000', '2026-11-19T02:33:24.3780000', NULL, '2026-11-21T06:57:23.5560000', NULL, 0),
 (2, N'nhung', N'NHUNG', N'nhung@mystyle.vn', N'NHUNG@MYSTYLE.VN', 0, NULL, N'6ED99879-D2A5-404A-A984-EAD28A88C8F8', N'08AA61B9-6B84-406C-BBE3-F0AECCC5CC86', '0912340001', 0, 0, NULL, 1, 0, N'Trần Thị Hồng Nhung', NULL, 1, 'vi', 0, 1, NULL, '2026-11-21T03:09:29.2800000', NULL, NULL, NULL, 0),
 (3, N'chau', N'CHAU', N'chau@mystyle.vn', N'CHAU@MYSTYLE.VN', 0, NULL, N'E2CBBF10-4C0D-463B-BF07-8C10AC1892AD', N'0EE5566A-21DA-4272-91A2-9F30BD2FDE62', '0912340002', 0, 0, NULL, 1, 0, N'Lê Minh Châu', NULL, 1, 'vi', 0, 1, NULL, '2026-11-21T03:09:29.2800000', NULL, NULL, NULL, 0),
 (4, N'ducanh', N'DUCANH', N'ducanh@mystyle.vn', N'DUCANH@MYSTYLE.VN', 0, N'AQAAAAIAAYagAAAAEBtb6iiRfAd5mFl4lacExqtGYg7xXth9dOrz1HtRU4Deo6jC84+Fk/VC+Waw+HF8zw==', N'C2FA3BF3-26FD-40C7-B343-7A03B3951AE0', N'0D9A9305-09D1-4832-816B-71B3ECC86EBA', '0912340003', 0, 0, NULL, 1, 0, N'Phạm Đức Anh', NULL, 1, 'vi', 0, 1, '2026-11-21T06:13:25.7190000', '2026-11-21T03:09:29.2800000', NULL, '2026-11-21T06:13:26.0120000', NULL, 0),
@@ -8874,7 +8895,7 @@ GO
 -- web.Sites (2 dòng)
 SET IDENTITY_INSERT [web].[Sites] ON;
 INSERT INTO [web].[Sites] ([Id], [CompanyId], [Name], [Domain], [DefaultLanguage], [LogoUrl], [FaviconUrl], [PriceListId], [WarehouseId], [Settings], [IsActive], [ApiKeyHash], [ApiKeyPrefix], [ApiKeyCreatedAt], [RevalidateUrl], [RevalidateSecret], [LastSyncAt], [LastSyncStatus], [BotUserId]) VALUES
-(1, 1, N'MyStyle Fashion', 'mystyle.vn', 'vi', NULL, NULL, NULL, 1, N'{"slogan":"Mặc đẹp mỗi ngày","hotline":"0909 123 456","email":"cskh@mystyle.vn","address":"123 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM","openingHours":"8:30 - 22:00 hằng ngày","facebook":"https://facebook.com/mystyle.vn","instagram":"https://instagram.com/mystyle.vn","tiktok":"https://tiktok.com/@mystyle.vn","zalo":"0909123456","primaryColor":"#D4537E","shippingFee":30000,"freeShippingFrom":500000}', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 10),
+(1, 1, N'MyStyle Fashion', 'mystyle.vn', 'vi', NULL, NULL, NULL, 1, N'{"slogan":"Mặc đẹp mỗi ngày","hotline":"0909 123 456","email":"cskh@mystyle.vn","address":"123 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM","openingHours":"8:30 - 22:00 hằng ngày","facebook":"https://facebook.com/mystyle.vn","instagram":"https://instagram.com/mystyle.vn","tiktok":"https://tiktok.com/@mystyle.vn","zalo":"0909123456","primaryColor":"#D4537E","shippingFee":30000,"freeShippingFrom":500000}', 1, 'a1f92ca46fb5101f06c2043f288727b96484ceaa9d9cd7d594c1d711ee8c9bd0', 'mys_u832sH', '2026-11-21T07:06:58.4230000', 'http://localhost:3000/api/revalidate', 'yjDPnUiPCgWaiSYCpKEWTb8y7TkbUCZd', NULL, NULL, 10),
 (2, 1, N'MyStyle Sneaker', 'sneaker.mystyle.vn', 'vi', NULL, NULL, NULL, 1, N'{"slogan":"Giày đẹp cho mọi bước chân","hotline":"0909 123 456","email":"sneaker@mystyle.vn","address":"123 Lê Lợi, Quận 1, TP.HCM","openingHours":"9:00 - 22:00","primaryColor":"#185FA5","shippingFee":25000,"freeShippingFrom":800000}', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 10)
 ;
 SET IDENTITY_INSERT [web].[Sites] OFF;

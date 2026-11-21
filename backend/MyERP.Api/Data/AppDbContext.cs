@@ -45,6 +45,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<App> Apps => Set<App>();
     public DbSet<CompanyApp> CompanyApps => Set<CompanyApp>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
 
     // ----- md (danh mục dùng chung) -----
     public DbSet<Partner> Partners => Set<Partner>();

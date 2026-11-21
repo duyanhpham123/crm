@@ -361,3 +361,38 @@ public class MultiSiteTests
         Assert.True(sp.IsFeatured);
     }
 }
+
+public class ApiTokenTests
+{
+    private static readonly DateTime Now = new(2026, 11, 21, 3, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void Token_is_returned_once_and_stored_hashed()
+    {
+        var (t, raw) = MyERP.Api.Models.Entities.Core.ApiToken.Issue(5, 1, "Claude Desktop", 90, Now).Value;
+        Assert.StartsWith("erp_", raw);
+        Assert.Equal(MyERP.Api.Models.Entities.Core.ApiToken.Hash(raw), t.TokenHash);
+        Assert.DoesNotContain(raw, t.TokenHash);
+        Assert.Equal(raw[..10], t.Prefix);
+        Assert.Equal(Now.AddDays(90), t.ExpiresAt);
+    }
+
+    [Fact]
+    public void Expiry_and_revoke()
+    {
+        var (t, _) = MyERP.Api.Models.Entities.Core.ApiToken.Issue(5, 1, "AI", 7, Now).Value;
+        Assert.True(t.IsActive(Now.AddDays(6)));
+        Assert.False(t.IsActive(Now.AddDays(8)));
+        var (forever, _) = MyERP.Api.Models.Entities.Core.ApiToken.Issue(5, 1, "AI", null, Now).Value;
+        Assert.True(forever.IsActive(Now.AddYears(5)));
+        forever.Revoke(Now);
+        Assert.False(forever.IsActive(Now));
+    }
+
+    [Fact]
+    public void Validates_name_and_allowed_durations()
+    {
+        Assert.True(MyERP.Api.Models.Entities.Core.ApiToken.Issue(5, 1, "x", 30, Now).IsFailure);
+        Assert.True(MyERP.Api.Models.Entities.Core.ApiToken.Issue(5, 1, "Claude", 45, Now).IsFailure);
+    }
+}

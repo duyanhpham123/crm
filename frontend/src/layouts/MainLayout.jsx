@@ -27,6 +27,9 @@ export default function MainLayout() {
         <div className="user-menu">
           <span className="avatar" title={me.fullName}>{initials(me.fullName)}</span>
           <span className="hide-sm">{me.fullName}</span>
+          <Link className="btn ghost" to="/ai" title="Trợ lý AI - kết nối Claude với ERP" aria-label="Trợ lý AI">
+            <i className="ti ti-robot" aria-hidden="true" />
+          </Link>
           <button className="btn ghost" onClick={() => setChangingPassword(true)} title="Đổi mật khẩu" aria-label="Đổi mật khẩu">
             <i className="ti ti-key" aria-hidden="true" />
           </button>

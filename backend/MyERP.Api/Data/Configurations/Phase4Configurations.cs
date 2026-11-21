@@ -9,6 +9,17 @@ namespace MyERP.Api.Data.Configurations;
 
 // Map entity Dự án / Tài liệu / Chat / Website vào các bảng prj, doc, chat, web, core.Attachments.
 
+internal sealed class ApiTokenConfiguration : IEntityTypeConfiguration<MyERP.Api.Models.Entities.Core.ApiToken>
+{
+    public void Configure(EntityTypeBuilder<MyERP.Api.Models.Entities.Core.ApiToken> e)
+    {
+        e.ToTable("ApiTokens", "core");
+        e.Property(x => x.TokenHash).HasColumnType("char(64)");
+        e.Property(x => x.Prefix).HasMaxLength(16).IsUnicode(false);
+        e.Property(x => x.LastUsedIp).HasMaxLength(45).IsUnicode(false);
+    }
+}
+
 internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 {
     public void Configure(EntityTypeBuilder<Project> e)

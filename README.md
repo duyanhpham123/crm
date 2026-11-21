@@ -7,6 +7,7 @@ Hệ thống quản trị doanh nghiệp (ERP/CRM) cho tất cả phòng ban.
 | Backend | ASP.NET Core 10 Web API, mô hình **MVC**, trả **JSON** | `backend/` |
 | Frontend | **React 19** + Vite + React Router + Axios | `frontend/` |
 | Website bán hàng mẫu | **Next.js 15** đọc dữ liệu từ ERP (nhiều website dùng chung 1 ERP) | `storefront/` |
+| Trợ lý AI | **MCP server** (Node.js) cho Claude Desktop: hỏi / ra lệnh ERP bằng lời, dùng quyền của người dùng | `mcp/` |
 | Database | SQL Server, 157 bảng, 15 schema | `database/MyERP.sql` |
 
 ```
@@ -44,6 +45,7 @@ Mở **http://localhost:5173**. Lần đầu sẽ hiện màn hình thiết lậ
 - **Database tạo từ trước** cần chạy các bản nâng cấp trong `database/source/migrations/` theo thứ tự ngày (chạy lại nhiều lần không sao), ví dụ:
   `sqlcmd -S localhost -E -d MyERP -I -f 65001 -i database/source/migrations/2026-11-24_phase4.sql` (bản mới nhất - quyền Chat / Tài liệu / Dự án cho mọi vai trò; dữ liệu mẫu đợt 4: `database/source/44_demo_phase4.sql`)
 - Dữ liệu mẫu đợt 4 tạo 6 tài khoản nhân viên (nhung, chau, ducanh, thaovy, tung, mai) **chưa có mật khẩu** - vào app Người dùng đặt mật khẩu nếu muốn đăng nhập bằng các tài khoản này.
+- Trợ lý AI: migration `.../migrations/2026-11-26_api_tokens.sql` (khóa truy cập cá nhân). Hướng dẫn cài Claude Desktop: `mcp/README.md` hoặc trang ERP → biểu tượng robot.
 - Nâng cấp nhiều website: `.../migrations/2026-11-25_multisite.sql`; dữ liệu mẫu 2 website: `database/source/45_demo_multisite.sql`. Hướng dẫn nối website Next.js: `storefront/README.md`.
 - File tải lên ở app Tài liệu lưu trong `backend/MyERP.Api/App_Data/uploads` (không commit; đổi chỗ bằng cấu hình `Storage:Root`, giới hạn `Storage:MaxUploadMb`, mặc định 20 MB). Mang sang máy khác thì chép cả thư mục này.
 - Quy tắc tính lương (giảm trừ gia cảnh, biểu thuế TNCN, tỷ lệ bảo hiểm) nằm ở `backend/MyERP.Api/Models/Entities/Hr/Payroll.cs` (`PayrollRules`) - kiểm tra lại theo quy định hiện hành trước khi trả lương thật.
@@ -182,6 +184,7 @@ Chỉ cần chạy một ứng dụng .NET: nó phục vụ cả API lẫn giao 
 | Chat nội bộ | Kênh toàn công ty, nhóm tự tạo, nhắn riêng 1-1; trả lời trích dẫn, sửa / thu hồi tin, thả biểu tượng; số tin chưa đọc; tự cập nhật tin mới vài giây một lần; dùng tốt trên điện thoại |
 | Website | Thông tin website, bật / tắt mẫu sản phẩm hiện trên web (giá, tồn lấy từ Kho); bài viết blog + trang tĩnh (đường dẫn tự tạo, SEO, xem trước, nháp / đăng); menu đầu / chân trang; liên hệ khách gửi từ web → tạo Lead CRM (trùng SĐT thì gắn lead cũ). API công khai cho web bán hàng: `/api/public/site`, `products`, `posts`, `pages/{slug}`, `contact` (chống spam bằng ô ẩn + giới hạn theo IP) |
 | Nhiều website tự code | Mỗi website (Next.js...) có khóa API riêng, chọn mẫu bày bán, giá riêng, nổi bật, menu, bài viết, phí ship riêng; website không có database - đọc thẳng ERP qua `/api/public` (khóa gửi trong header `X-Site-Key`, chỉ dùng ở máy chủ website). Đơn đặt từ web vào app Đơn hàng (Nháp, kênh Website), giá / tồn / mã giảm giá tính lại ở ERP, khách tìm theo SĐT. Sửa sản phẩm, giá, tồn kho, bài viết, menu ở ERP → webhook báo website làm mới ngay |
+| Trợ lý AI (Claude) | Mỗi người tự tạo **khóa truy cập cá nhân** (7/30/90/365 ngày, thu hồi được); Claude Desktop cắm vào ERP qua MCP server `mcp/` với 17 công cụ: báo cáo, tìm sản phẩm / đơn / khách, hàng sắp hết, đổi giá hàng loạt (luôn xem trước), bày sản phẩm lên website, tạo mã giảm giá, viết bài, giao việc. AI có đúng quyền của chủ khóa; khóa không quản lý được người dùng / vai trò / khóa / mật khẩu |
 | Cài đặt | Thông tin cửa hàng + chính sách đổi trả (in trên báo giá), phòng ban, kho hàng, bật / tắt ứng dụng trên màn hình chính, quy tắc đánh số chứng từ |
 | Đánh số chứng từ | Bộ đếm riêng từng kỳ - nhập chứng từ lùi ngày không bị trùng số |
 | Người dùng | Danh sách, lọc theo phòng ban / vai trò / trạng thái; tạo tài khoản (mật khẩu ban đầu có nút sinh ngẫu nhiên); sửa thông tin, phòng ban, vai trò (quyền mới có hiệu lực ngay); khóa / mở khóa (đăng xuất khỏi mọi thiết bị); đặt lại mật khẩu |
